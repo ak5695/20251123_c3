@@ -11,4 +11,9 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
   },
+  trustedOrigins: [
+    "https://c3.dufran.cn", 
+    "https://www.c3.dufran.cn", 
+    "http://localhost:3000"
+  ],
 });

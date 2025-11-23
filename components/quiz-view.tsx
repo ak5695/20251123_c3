@@ -36,6 +36,7 @@ interface Question {
   options: string; // JSON string
   answer: string;
   explanation: string;
+  mnemonic: string | null;
   isCollected: boolean;
 }
 
@@ -57,9 +58,44 @@ export function QuizView({ mode }: QuizViewProps) {
     []
   );
   // Track answered questions to show status in sheet
-  const [answeredQuestions, setAnsweredQuestions] = useState<
-    Record<number, boolean>
-  >({});
+  const [answeredQuestions, setAnsweredQuestions] = useState<Record<number, boolean>>({});
+
+  // Touch handling
+  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
+  const [touchEnd, setTouchEnd] = useState<{ x: number; y: number } | null>(null);
+  const minSwipeDistance = 50;
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart({
+      x: e.targetTouches[0].clientX,
+      y: e.targetTouches[0].clientY,
+    });
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd({
+      x: e.targetTouches[0].clientX,
+      y: e.targetTouches[0].clientY,
+    });
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    const distanceX = touchStart.x - touchEnd.x;
+    const distanceY = touchStart.y - touchEnd.y;
+    const isLeftSwipe = distanceX > minSwipeDistance;
+    const isRightSwipe = distanceX < -minSwipeDistance;
+
+    if (Math.abs(distanceX) > Math.abs(distanceY)) {
+      if (isLeftSwipe) {
+        handleNext();
+      }
+      if (isRightSwipe) {
+        handlePrev();
+      }
+    }
+  };
 
   useEffect(() => {
     async function fetchQuestions() {
@@ -234,7 +270,12 @@ export function QuizView({ mode }: QuizViewProps) {
   const options = JSON.parse(currentQuestion.options);
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <div 
+      className="flex flex-col h-screen bg-gray-50"
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+    >
       {/* Header */}
       <header className="bg-white p-4 shadow-sm flex justify-between items-center sticky top-0 z-10">
         <Button
@@ -330,6 +371,14 @@ export function QuizView({ mode }: QuizViewProps) {
             <div className="text-gray-600 text-sm">
               {currentQuestion.explanation}
             </div>
+            {currentQuestion.mnemonic && (
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <div className="font-bold mb-1 text-orange-600">记忆技巧</div>
+                <div className="text-gray-600 text-sm">
+                  {currentQuestion.mnemonic}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </main>

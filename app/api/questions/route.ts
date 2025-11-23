@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
           options: questions.options,
           answer: questions.answer,
           explanation: questions.explanation,
+          mnemonic: questions.mnemonic,
           category: questions.category,
           isCollected: userQuestionState.isCollected,
         })
@@ -53,6 +54,7 @@ export async function GET(req: NextRequest) {
           options: questions.options,
           answer: questions.answer,
           explanation: questions.explanation,
+          mnemonic: questions.mnemonic,
           category: questions.category,
           isCollected: userQuestionState.isCollected,
         })
@@ -76,6 +78,7 @@ export async function GET(req: NextRequest) {
           options: questions.options,
           answer: questions.answer,
           explanation: questions.explanation,
+          mnemonic: questions.mnemonic,
           category: questions.category,
           isCollected: userQuestionState.isCollected,
         })
@@ -103,6 +106,7 @@ export async function GET(req: NextRequest) {
       options: questions.options,
       answer: questions.answer,
       explanation: questions.explanation,
+      mnemonic: questions.mnemonic,
       category: questions.category,
       isCollected: userQuestionState.isCollected,
     })
