@@ -40,7 +40,11 @@ export default function RecordsPage() {
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       <header className="bg-white p-4 shadow-sm flex items-center sticky top-0 z-10">
-        <Button variant="ghost" size="icon" onClick={() => window.history.back()}>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => window.history.back()}
+        >
           <ChevronLeft className="w-6 h-6" />
         </Button>
         <h1 className="font-medium ml-2">做题记录</h1>
@@ -57,7 +61,14 @@ export default function RecordsPage() {
               <CardContent className="p-4">
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex items-center gap-2">
-                    <Badge variant={record.isCorrect ? "default" : "destructive"} className={record.isCorrect ? "bg-green-500 hover:bg-green-600" : ""}>
+                    <Badge
+                      variant={record.isCorrect ? "default" : "destructive"}
+                      className={
+                        record.isCorrect
+                          ? "bg-green-500 hover:bg-green-600"
+                          : ""
+                      }
+                    >
                       {record.isCorrect ? "正确" : "错误"}
                     </Badge>
                     <span className="text-xs text-gray-400">
@@ -65,11 +76,27 @@ export default function RecordsPage() {
                     </span>
                   </div>
                 </div>
-                <p className="text-sm font-medium mb-3 line-clamp-2">{record.questionContent}</p>
+                <p className="text-sm font-medium mb-3 line-clamp-2">
+                  {record.questionContent}
+                </p>
                 <div className="text-xs text-gray-500 flex gap-4">
-                  <span>你的答案: <span className={record.isCorrect ? "text-green-600" : "text-red-600"}>{record.userAnswer}</span></span>
+                  <span>
+                    你的答案:{" "}
+                    <span
+                      className={
+                        record.isCorrect ? "text-green-600" : "text-red-600"
+                      }
+                    >
+                      {record.userAnswer}
+                    </span>
+                  </span>
                   {!record.isCorrect && (
-                    <span>正确答案: <span className="text-green-600">{record.correctAnswer}</span></span>
+                    <span>
+                      正确答案:{" "}
+                      <span className="text-green-600">
+                        {record.correctAnswer}
+                      </span>
+                    </span>
                   )}
                 </div>
               </CardContent>

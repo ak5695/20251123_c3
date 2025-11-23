@@ -58,11 +58,17 @@ export function QuizView({ mode }: QuizViewProps) {
     []
   );
   // Track answered questions to show status in sheet
-  const [answeredQuestions, setAnsweredQuestions] = useState<Record<number, boolean>>({});
+  const [answeredQuestions, setAnsweredQuestions] = useState<
+    Record<number, boolean>
+  >({});
 
   // Touch handling
-  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
-  const [touchEnd, setTouchEnd] = useState<{ x: number; y: number } | null>(null);
+  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(
+    null
+  );
+  const [touchEnd, setTouchEnd] = useState<{ x: number; y: number } | null>(
+    null
+  );
   const minSwipeDistance = 50;
 
   const onTouchStart = (e: React.TouchEvent) => {
@@ -270,7 +276,7 @@ export function QuizView({ mode }: QuizViewProps) {
   const options = JSON.parse(currentQuestion.options);
 
   return (
-    <div 
+    <div
       className="flex flex-col h-screen bg-gray-50"
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
