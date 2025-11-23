@@ -38,13 +38,15 @@ interface Question {
   explanation: string;
   mnemonic: string | null;
   isCollected: boolean;
+  isPracticed?: boolean;
 }
 
 interface QuizViewProps {
   mode: string;
+  category?: string;
 }
 
-export function QuizView({ mode }: QuizViewProps) {
+export function QuizView({ mode, category }: QuizViewProps) {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -106,7 +108,11 @@ export function QuizView({ mode }: QuizViewProps) {
   useEffect(() => {
     async function fetchQuestions() {
       try {
-        const res = await fetch(`/api/questions?mode=${mode}&limit=50`);
+        let url = `/api/questions?mode=${mode}&limit=50`;
+        if (category) {
+          url += `&category=${encodeURIComponent(category)}`;
+        }
+        const res = await fetch(url);
         const data = await res.json();
         setQuestions(data);
       } catch (error) {
@@ -116,7 +122,20 @@ export function QuizView({ mode }: QuizViewProps) {
       }
     }
     fetchQuestions();
-  }, [mode]);
+  }, [mode, category]);
+
+  // Reset state when changing questions
+  useEffect(() => {
+    const question = questions[currentIndex];
+    if (question?.isPracticed) {
+      setShowAnswer(true);
+      setIsSubmitted(true);
+    } else {
+      setShowAnswer(false);
+      setIsSubmitted(false);
+      setSelectedAnswers([]);
+    }
+  }, [currentIndex, questions]);
 
   const currentQuestion = questions[currentIndex];
 
@@ -292,13 +311,14 @@ export function QuizView({ mode }: QuizViewProps) {
           <ChevronLeft className="w-6 h-6" />
         </Button>
         <h1 className="font-medium truncate max-w-[200px]">
-          {mode === "mock"
-            ? "模拟试卷"
-            : mode === "mistakes"
-            ? "错题强化"
-            : mode === "collection"
-            ? "试题收藏"
-            : "章节练习"}{" "}
+          {category ||
+            (mode === "mock"
+              ? "模拟试卷"
+              : mode === "mistakes"
+              ? "错题强化"
+              : mode === "collection"
+              ? "试题收藏"
+              : "练习")}{" "}
           ({currentIndex + 1}/{questions.length})
         </h1>
         <div className="flex gap-2">

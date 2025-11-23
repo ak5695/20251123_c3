@@ -64,15 +64,21 @@ export default function Dashboard() {
   ];
 
   const modes = [
-    { label: "章节练习", icon: BookOpen, href: "/quiz/chapter" },
     { label: "模拟试卷", icon: FileText, href: "/quiz/mock" },
     { label: "试题收藏", icon: Star, href: "/quiz/collection" },
+  ];
+
+  const categories = [
+    { label: "法律法规", color: "text-blue-500", bg: "bg-blue-50" },
+    { label: "安全管理", color: "text-green-500", bg: "bg-green-50" },
+    { label: "土建综合安全技术", color: "text-purple-500", bg: "bg-purple-50" },
+    { label: "机械设备安全技术", color: "text-orange-500", bg: "bg-orange-50" },
   ];
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       <header className="bg-white p-4 shadow-sm sticky top-0 z-10">
-        <h1 className="text-lg font-bold text-center">安考宝典</h1>
+        <h1 className="text-lg font-bold text-center">C3安考宝典</h1>
       </header>
 
       <main className="p-4 space-y-6">
@@ -95,24 +101,48 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Modes */}
+        {/* Categories */}
         <div className="space-y-4">
-          <h2 className="text-sm font-medium text-gray-500">智能题库</h2>
-          <div className="grid gap-4">
+          <h2 className="text-sm font-medium text-gray-500">专项练习</h2>
+          <div className="grid grid-cols-2 gap-3">
+            {categories.map((category) => (
+              <Card
+                key={category.label}
+                className="cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() =>
+                  router.push(
+                    `/quiz/category?category=${encodeURIComponent(
+                      category.label
+                    )}`
+                  )
+                }
+              >
+                <CardContent className="flex items-center p-4 gap-3">
+                  <div className={`p-2 rounded-lg ${category.bg} shrink-0`}>
+                    <BookOpen className={`w-5 h-5 ${category.color}`} />
+                  </div>
+                  <span className="font-medium text-sm">{category.label}</span>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+
+        {/* Other Modes */}
+        <div className="space-y-4">
+          <h2 className="text-sm font-medium text-gray-500">常用功能</h2>
+          <div className="grid grid-cols-2 gap-3">
             {modes.map((mode) => (
               <Card
                 key={mode.label}
                 className="cursor-pointer hover:shadow-md transition-shadow"
                 onClick={() => router.push(mode.href)}
               >
-                <CardContent className="flex items-center justify-between p-4">
-                  <div className="flex items-center gap-4">
-                    <div className="p-2 bg-orange-50 rounded-lg">
-                      <mode.icon className="w-6 h-6 text-orange-500" />
-                    </div>
-                    <span className="font-medium">{mode.label}</span>
+                <CardContent className="flex items-center p-4 gap-3">
+                  <div className="p-2 bg-gray-50 rounded-lg shrink-0">
+                    <mode.icon className="w-5 h-5 text-gray-500" />
                   </div>
-                  <div className="text-gray-300">›</div>
+                  <span className="font-medium text-sm">{mode.label}</span>
                 </CardContent>
               </Card>
             ))}

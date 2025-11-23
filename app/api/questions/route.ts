@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
           mnemonic: questions.mnemonic,
           category: questions.category,
           isCollected: userQuestionState.isCollected,
+          isPracticed: sql<boolean>`COALESCE(${userQuestionState.correctCount}, 0) > 0 OR COALESCE(${userQuestionState.wrongCount}, 0) > 0`,
         })
         .from(questions)
         .leftJoin(
@@ -57,6 +58,7 @@ export async function GET(req: NextRequest) {
           mnemonic: questions.mnemonic,
           category: questions.category,
           isCollected: userQuestionState.isCollected,
+          isPracticed: sql<boolean>`COALESCE(${userQuestionState.correctCount}, 0) > 0 OR COALESCE(${userQuestionState.wrongCount}, 0) > 0`,
         })
         .from(questions)
         .leftJoin(
@@ -81,6 +83,7 @@ export async function GET(req: NextRequest) {
           mnemonic: questions.mnemonic,
           category: questions.category,
           isCollected: userQuestionState.isCollected,
+          isPracticed: sql<boolean>`COALESCE(${userQuestionState.correctCount}, 0) > 0 OR COALESCE(${userQuestionState.wrongCount}, 0) > 0`,
         })
         .from(questions)
         .leftJoin(
@@ -109,6 +112,7 @@ export async function GET(req: NextRequest) {
       mnemonic: questions.mnemonic,
       category: questions.category,
       isCollected: userQuestionState.isCollected,
+      isPracticed: sql<boolean>`COALESCE(${userQuestionState.correctCount}, 0) > 0 OR COALESCE(${userQuestionState.wrongCount}, 0) > 0`,
     })
     .from(questions)
     .leftJoin(

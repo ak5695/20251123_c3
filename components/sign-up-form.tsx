@@ -69,7 +69,7 @@ export function SignUpForm() {
       <form onSubmit={handleSubmit}>
         <CardContent className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="name">Name</Label>
+            <Label htmlFor="name">名字</Label>
             <Input
               id="name"
               placeholder="John Doe"
@@ -79,7 +79,7 @@ export function SignUpForm() {
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">邮箱</Label>
             <Input
               id="email"
               type="email"
@@ -90,7 +90,7 @@ export function SignUpForm() {
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password">密码</Label>
             <Input
               id="password"
               type="password"
@@ -102,7 +102,7 @@ export function SignUpForm() {
         </CardContent>
         <CardFooter>
           <Button className="w-full mt-6" type="submit" disabled={loading}>
-            {loading ? "Creating account..." : "Create account"}
+            {loading ? "创建账户中..." : "创建账户"}
           </Button>
         </CardFooter>
       </form>
