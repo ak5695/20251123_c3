@@ -2,7 +2,7 @@
 
 import { authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   BookOpen,
@@ -12,11 +12,16 @@ import {
   PenTool,
   Star,
   AlertTriangle,
+  BarChart,
 } from "lucide-react";
 
 export default function Dashboard() {
   const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
+
+  const [stats, setStats] = useState<
+    { category: string; total: number; answered: number }[]
+  >([]);
 
   useEffect(() => {
     if (!isPending && !session) {
@@ -24,11 +29,18 @@ export default function Dashboard() {
     }
   }, [session, isPending, router]);
 
+  useEffect(() => {
+    if (session) {
+      fetch("/api/stats")
+        .then((res) => res.json())
+        .then((data) => setStats(data))
+        .catch(console.error);
+    }
+  }, [session]);
+
   if (isPending)
     return (
-      <div className="flex h-screen items-center justify-center">
-        Loading...
-      </div>
+      <div className="flex h-screen items-center justify-center">加载中...</div>
     );
   if (!session) return null;
 
@@ -55,11 +67,11 @@ export default function Dashboard() {
       href: "/notes",
     },
     {
-      label: "反馈纠错",
-      icon: MessageSquare,
+      label: "模拟成绩",
+      icon: BarChart,
       color: "text-blue-500",
       bg: "bg-blue-100",
-      href: "/feedback",
+      href: "/mock-scores",
     },
   ];
 
@@ -105,26 +117,36 @@ export default function Dashboard() {
         <div className="space-y-4">
           <h2 className="text-sm font-medium text-gray-500">专项练习</h2>
           <div className="grid grid-cols-2 gap-3">
-            {categories.map((category) => (
-              <Card
-                key={category.label}
-                className="cursor-pointer hover:shadow-md transition-shadow"
-                onClick={() =>
-                  router.push(
-                    `/quiz/category?category=${encodeURIComponent(
-                      category.label
-                    )}`
-                  )
-                }
-              >
-                <CardContent className="flex items-center p-4 gap-3">
-                  <div className={`p-2 rounded-lg ${category.bg} shrink-0`}>
-                    <BookOpen className={`w-5 h-5 ${category.color}`} />
-                  </div>
-                  <span className="font-medium text-sm">{category.label}</span>
-                </CardContent>
-              </Card>
-            ))}
+            {categories.map((category) => {
+              const stat = stats.find((s) => s.category === category.label);
+              return (
+                <Card
+                  key={category.label}
+                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() =>
+                    router.push(
+                      `/quiz/category?category=${encodeURIComponent(
+                        category.label
+                      )}`
+                    )
+                  }
+                >
+                  <CardContent className="flex flex-col p-4 gap-2">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-lg ${category.bg} shrink-0`}>
+                        <BookOpen className={`w-5 h-5 ${category.color}`} />
+                      </div>
+                      <span className="font-medium text-sm">
+                        {category.label}
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-400 pl-1">
+                      {stat ? `${stat.answered}/${stat.total}` : "加载中..."}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </div>
 

@@ -11,6 +11,8 @@ export async function GET(req: NextRequest) {
   const category = searchParams.get("category");
   const limit = parseInt(searchParams.get("limit") || "10");
   const offset = parseInt(searchParams.get("offset") || "0");
+  const filterPracticed = searchParams.get("filterPracticed") === "true";
+  const random = searchParams.get("random") === "true";
 
   const session = await auth.api.getSession({
     headers: await headers(),
@@ -33,6 +35,7 @@ export async function GET(req: NextRequest) {
           mnemonic: questions.mnemonic,
           category: questions.category,
           isCollected: userQuestionState.isCollected,
+          note: userQuestionState.note,
           isPracticed: sql<boolean>`COALESCE(${userQuestionState.correctCount}, 0) > 0 OR COALESCE(${userQuestionState.wrongCount}, 0) > 0`,
         })
         .from(questions)
@@ -58,6 +61,7 @@ export async function GET(req: NextRequest) {
           mnemonic: questions.mnemonic,
           category: questions.category,
           isCollected: userQuestionState.isCollected,
+          note: userQuestionState.note,
           isPracticed: sql<boolean>`COALESCE(${userQuestionState.correctCount}, 0) > 0 OR COALESCE(${userQuestionState.wrongCount}, 0) > 0`,
         })
         .from(questions)
@@ -83,6 +87,7 @@ export async function GET(req: NextRequest) {
           mnemonic: questions.mnemonic,
           category: questions.category,
           isCollected: userQuestionState.isCollected,
+          note: userQuestionState.note,
           isPracticed: sql<boolean>`COALESCE(${userQuestionState.correctCount}, 0) > 0 OR COALESCE(${userQuestionState.wrongCount}, 0) > 0`,
         })
         .from(questions)
@@ -98,7 +103,8 @@ export async function GET(req: NextRequest) {
         .limit(18),
     ]);
 
-    return NextResponse.json([...single, ...multiple, ...judge]);
+    const data = [...single, ...multiple, ...judge];
+    return NextResponse.json({ data, total: data.length });
   }
 
   let query = db
@@ -112,6 +118,7 @@ export async function GET(req: NextRequest) {
       mnemonic: questions.mnemonic,
       category: questions.category,
       isCollected: userQuestionState.isCollected,
+      note: userQuestionState.note,
       isPracticed: sql<boolean>`COALESCE(${userQuestionState.correctCount}, 0) > 0 OR COALESCE(${userQuestionState.wrongCount}, 0) > 0`,
     })
     .from(questions)
@@ -130,15 +137,54 @@ export async function GET(req: NextRequest) {
     // @ts-ignore
     query = query.where(and(eq(userQuestionState.isCollected, true)));
   } else {
+    const conditions = [];
     if (category) {
-      query = query.where(
-        sql`${questions.category} LIKE ${`%${category}%`}`
-      ) as any;
+      conditions.push(sql`${questions.category} LIKE ${`%${category}%`}`);
+    }
+
+    if (filterPracticed) {
+      conditions.push(
+        sql`COALESCE(${userQuestionState.correctCount}, 0) = 0 AND COALESCE(${userQuestionState.wrongCount}, 0) = 0`
+      );
+    }
+
+    if (conditions.length > 0) {
+      // @ts-ignore
+      query = query.where(and(...conditions));
+    }
+
+    // Get total count for pagination
+    const countQuery = db
+      .select({ count: sql<number>`count(*)` })
+      .from(questions)
+      .leftJoin(
+        userQuestionState,
+        and(
+          eq(questions.id, userQuestionState.questionId),
+          session ? eq(userQuestionState.userId, session.user.id) : sql`FALSE`
+        )
+      );
+
+    if (conditions.length > 0) {
+      // @ts-ignore
+      countQuery.where(and(...conditions));
+    }
+
+    const [{ count }] = await countQuery;
+
+    if (random) {
+      // @ts-ignore
+      query = query.orderBy(sql`RANDOM()`);
+    } else {
+      // @ts-ignore
+      query = query.orderBy(questions.id);
     }
 
     query = query.limit(limit).offset(offset) as any;
+    const data = await query;
+    return NextResponse.json({ data, total: count });
   }
 
   const data = await query;
-  return NextResponse.json(data);
+  return NextResponse.json({ data, total: data.length });
 }

@@ -97,5 +97,19 @@ export const userQuestionState = pgTable("user_question_state", {
   isCollected: boolean("isCollected").default(false).notNull(),
   wrongCount: integer("wrongCount").default(0).notNull(),
   correctCount: integer("correctCount").default(0).notNull(),
+  note: text("note"),
   lastAnsweredAt: timestamp("lastAnsweredAt"),
+});
+
+export const mockExamScores = pgTable("mock_exam_scores", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("userId")
+    .notNull()
+    .references(() => user.id),
+  score: integer("score").notNull(),
+  totalQuestions: integer("totalQuestions").notNull(),
+  correctCount: integer("correctCount").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
