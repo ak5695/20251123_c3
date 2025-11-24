@@ -221,7 +221,7 @@ export function QuizView({ mode, category }: QuizViewProps) {
         setTotalCount(state.questions.length);
         setLoading(false);
         setIsPaused(true); // Start paused when resuming
-        
+
         // Prevent fetching new questions
         skipFetchRef.current = true;
         setIsCheckingResume(false);
