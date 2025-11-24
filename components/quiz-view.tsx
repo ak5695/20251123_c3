@@ -21,6 +21,8 @@ import {
   LayoutList,
   Settings,
   Star,
+  Pause,
+  Play,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -45,6 +47,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Question {
   id: number;
@@ -100,6 +112,36 @@ export function QuizView({ mode, category }: QuizViewProps) {
   const [results, setResults] = useState<{ id: number; isCorrect: boolean }[]>(
     []
   );
+
+  // Timer state for mock mode
+  const [timeLeft, setTimeLeft] = useState(90 * 60); // 90 minutes in seconds
+  const [isPaused, setIsPaused] = useState(false);
+
+  useEffect(() => {
+    if (mode !== "mock" || showSummary || isPaused) return;
+
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          handleMockSubmit();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [mode, showSummary, isPaused]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs
+      .toString()
+      .padStart(2, "0")}`;
+  };
+
   // Track answered questions to show status in sheet
   const [answeredQuestions, setAnsweredQuestions] = useState<
     Record<number, boolean>
@@ -111,6 +153,125 @@ export function QuizView({ mode, category }: QuizViewProps) {
   const [mockScore, setMockScore] = useState<number | null>(null);
   const [note, setNote] = useState<string>("");
   const [isSavingNote, setIsSavingNote] = useState(false);
+
+  const [isCheckingResume, setIsCheckingResume] = useState(mode === "mock");
+  const [showResumeDialog, setShowResumeDialog] = useState(false);
+
+  // Ref to hold current state for event listeners
+  const stateRef = useRef({
+    questions,
+    currentIndex,
+    timeLeft,
+    allUserAnswers,
+    answeredQuestions,
+    results,
+    showSummary,
+  });
+
+  useEffect(() => {
+    stateRef.current = {
+      questions,
+      currentIndex,
+      timeLeft,
+      allUserAnswers,
+      answeredQuestions,
+      results,
+      showSummary,
+    };
+  }, [
+    questions,
+    currentIndex,
+    timeLeft,
+    allUserAnswers,
+    answeredQuestions,
+    results,
+    showSummary,
+  ]);
+
+  const saveMockProgress = () => {
+    if (mode !== "mock" || questions.length === 0 || showSummary) return;
+
+    const state = {
+      questions,
+      currentIndex,
+      timeLeft,
+      allUserAnswers,
+      answeredQuestions,
+      results,
+      timestamp: Date.now(),
+    };
+    localStorage.setItem("MOCK_EXAM_STATE", JSON.stringify(state));
+  };
+
+  const clearMockProgress = () => {
+    localStorage.removeItem("MOCK_EXAM_STATE");
+  };
+
+  const loadMockProgress = () => {
+    try {
+      const saved = localStorage.getItem("MOCK_EXAM_STATE");
+      if (saved) {
+        const state = JSON.parse(saved);
+        setQuestions(state.questions);
+        setCurrentIndex(state.currentIndex);
+        setTimeLeft(state.timeLeft);
+        setAllUserAnswers(state.allUserAnswers);
+        setAnsweredQuestions(state.answeredQuestions);
+        setResults(state.results);
+        setTotalCount(state.questions.length);
+        setLoading(false);
+        setIsPaused(true); // Start paused when resuming
+        
+        // Prevent fetching new questions
+        skipFetchRef.current = true;
+        setIsCheckingResume(false);
+      }
+    } catch (e) {
+      console.error("Failed to load mock progress", e);
+      toast.error("无法恢复上次考试进度");
+      clearMockProgress();
+      setIsCheckingResume(false);
+    }
+  };
+
+  // Check for saved progress on mount
+  useEffect(() => {
+    if (mode === "mock") {
+      const saved = localStorage.getItem("MOCK_EXAM_STATE");
+      if (saved) {
+        setShowResumeDialog(true);
+      } else {
+        setIsCheckingResume(false);
+      }
+    }
+  }, [mode]);
+
+  // Pause timer when visibility changes (e.g. switching tabs)
+  useEffect(() => {
+    if (mode !== "mock") return;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        setIsPaused(true);
+        // Save state using ref
+        const state = stateRef.current;
+        if (state.questions.length > 0 && !state.showSummary) {
+          localStorage.setItem(
+            "MOCK_EXAM_STATE",
+            JSON.stringify({
+              ...state,
+              timestamp: Date.now(),
+            })
+          );
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [mode]);
 
   // Touch handling
   const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(
@@ -171,6 +332,9 @@ export function QuizView({ mode, category }: QuizViewProps) {
         skipFetchRef.current = false;
         return;
       }
+
+      if (mode === "mock" && isCheckingResume) return;
+
       try {
         setLoading(true);
         let url = `/api/questions?mode=${mode}&offset=${offset}`;
@@ -216,7 +380,7 @@ export function QuizView({ mode, category }: QuizViewProps) {
       }
     }
     fetchQuestions();
-  }, [mode, category, offset, viewMode, quizParams]);
+  }, [mode, category, offset, viewMode, quizParams, isCheckingResume]);
 
   // Reset state when changing questions
   useEffect(() => {
@@ -317,6 +481,7 @@ export function QuizView({ mode, category }: QuizViewProps) {
   };
 
   const handleMockSubmit = async () => {
+    clearMockProgress();
     let score = 0;
     let correctCount = 0;
     const newResults: { id: number; isCorrect: boolean }[] = [];
@@ -338,13 +503,8 @@ export function QuizView({ mode, category }: QuizViewProps) {
         if (userAnsStr === q.answer) {
           points = 2;
           isCorrect = true;
-        } else if (userAns.length > 0) {
-          // Check for partial credit: all selected options must be in the answer
-          const isSubset = userAns.every((opt) => q.answer.includes(opt));
-          if (isSubset) {
-            points = 1;
-          }
         }
+        // No partial credit for multiple choice
       }
 
       if (isCorrect) correctCount++;
@@ -458,6 +618,42 @@ export function QuizView({ mode, category }: QuizViewProps) {
     }
   };
 
+  if (isCheckingResume) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-50">
+        <AlertDialog open={showResumeDialog} onOpenChange={setShowResumeDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>恢复考试</AlertDialogTitle>
+              <AlertDialogDescription>
+                检测到您有未完成的模拟考试，是否继续上次的进度？
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel
+                onClick={() => {
+                  clearMockProgress();
+                  setIsCheckingResume(false);
+                  setShowResumeDialog(false);
+                }}
+              >
+                重新开始
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  loadMockProgress();
+                  setShowResumeDialog(false);
+                }}
+              >
+                继续考试
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    );
+  }
+
   if (loading) return <div className="p-8 text-center">加载题目中...</div>;
   if (questions.length === 0)
     return <div className="p-8 text-center">没找到题目</div>;
@@ -543,6 +739,9 @@ export function QuizView({ mode, category }: QuizViewProps) {
             if (viewMode === "list" && detailIndex !== null) {
               setDetailIndex(null);
             } else {
+              if (mode === "mock") {
+                saveMockProgress();
+              }
               window.history.back();
             }
           }}
@@ -572,14 +771,31 @@ export function QuizView({ mode, category }: QuizViewProps) {
         </h1>
         <div className="flex gap-2 items-center">
           {mode === "mock" && (
-            <Button
-              onClick={handleMockSubmit}
-              size="sm"
-              variant="destructive"
-              className="h-8 px-3 mr-1"
-            >
-              交卷
-            </Button>
+            <>
+              <div className="flex items-center gap-1 mr-1 text-orange-500 font-mono font-bold text-sm">
+                {formatTime(timeLeft)}
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setIsPaused(!isPaused)}
+              >
+                {isPaused ? (
+                  <Play className="w-4 h-4" />
+                ) : (
+                  <Pause className="w-4 h-4" />
+                )}
+              </Button>
+              <Button
+                onClick={handleMockSubmit}
+                size="sm"
+                variant="destructive"
+                className="h-8 px-3 mr-1"
+              >
+                交卷
+              </Button>
+            </>
           )}
           {mode === "category" && (
             <Button
@@ -620,6 +836,20 @@ export function QuizView({ mode, category }: QuizViewProps) {
           )}
         </div>
       </header>
+
+      {/* Pause Overlay */}
+      {isPaused && (
+        <div className="absolute inset-0 bg-white/95 z-50 flex flex-col items-center justify-center">
+          <div className="text-2xl font-bold mb-4">考试暂停</div>
+          <div className="text-4xl font-mono text-orange-500 mb-8">
+            {formatTime(timeLeft)}
+          </div>
+          <Button size="lg" onClick={() => setIsPaused(false)}>
+            <Play className="w-5 h-5 mr-2" />
+            继续考试
+          </Button>
+        </div>
+      )}
 
       {/* Content */}
       <main className="flex-1 overflow-y-auto p-4">
