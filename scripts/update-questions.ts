@@ -12,6 +12,8 @@ const mapType = (type: string) => {
   return "SINGLE";
 };
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function main() {
   const jsonPath = path.join(process.cwd(), "广东C3终极完美版.json");
   const fileContent = fs.readFileSync(jsonPath, "utf-8");
@@ -23,7 +25,7 @@ async function main() {
 
   for (let i = 0; i < data.length; i++) {
     const item = data[i];
-    const id = i + 1; // Assuming 1-based ID matches the Serial/Index
+    const id = item.Serial ? parseInt(item.Serial) : i + 1;
 
     const options = [];
     if (item["Option A"]) options.push({ label: "A", value: item["Option A"] });
@@ -32,23 +34,46 @@ async function main() {
     if (item["Option D"]) options.push({ label: "D", value: item["Option D"] });
     if (item["Option E"]) options.push({ label: "E", value: item["Option E"] });
 
-    await db
-      .update(questions)
-      .set({
-        type: mapType(item["Type"]),
-        content: item["Question"],
-        options: JSON.stringify(options),
-        answer: item["Answer"],
-        explanation: item["答案解析"],
-        mnemonic: item["记忆技巧"],
-        category: item["类别关键词"],
-        keywords: JSON.stringify(item["题目关键词"] || []),
-      })
-      .where(eq(questions.id, id));
+    try {
+      await db
+        .update(questions)
+        .set({
+          type: mapType(item["Type"]),
+          content: item["Question"],
+          options: JSON.stringify(options),
+          answer: item["Answer"],
+          explanation: item["答案解析"],
+          mnemonic: item["记忆技巧"],
+          category: item["类别关键词"],
+          keywords: JSON.stringify(item["题目关键词"] || []),
+        })
+        .where(eq(questions.id, id));
+    } catch (e) {
+      console.error(`Failed to update question ${id}:`, e);
+      await sleep(1000);
+      try {
+        await db
+          .update(questions)
+          .set({
+            type: mapType(item["Type"]),
+            content: item["Question"],
+            options: JSON.stringify(options),
+            answer: item["Answer"],
+            explanation: item["答案解析"],
+            mnemonic: item["记忆技巧"],
+            category: item["类别关键词"],
+            keywords: JSON.stringify(item["题目关键词"] || []),
+          })
+          .where(eq(questions.id, id));
+      } catch (retryError) {
+        console.error(`Retry failed for question ${id}:`, retryError);
+      }
+    }
 
     updatedCount++;
-    if (updatedCount % 100 === 0) {
+    if (updatedCount % 50 === 0) {
       process.stdout.write(".");
+      await sleep(200);
     }
   }
 

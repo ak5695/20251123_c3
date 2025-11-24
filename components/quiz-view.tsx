@@ -57,6 +57,7 @@ interface Question {
   category: string | null;
   isCollected: boolean;
   note: string | null;
+  image: string | null;
   isPracticed?: boolean;
 }
 
@@ -639,6 +640,15 @@ export function QuizView({ mode, category }: QuizViewProps) {
                   </span>
                   <div>
                     <div className="mb-2 font-medium">{q.content}</div>
+                    {q.image && (
+                      <div className="mb-2">
+                        <img
+                          src={q.image}
+                          alt="Question Image"
+                          className="max-w-full h-auto rounded-lg"
+                        />
+                      </div>
+                    )}
                     <div className="text-sm text-gray-500 flex gap-2">
                       <span
                         className={
@@ -700,6 +710,16 @@ export function QuizView({ mode, category }: QuizViewProps) {
                 {currentQuestion.content}
               </span>
             </div>
+
+            {currentQuestion.image && (
+              <div className="mb-4">
+                <img
+                  src={currentQuestion.image}
+                  alt="Question Image"
+                  className="max-w-full h-auto rounded-lg"
+                />
+              </div>
+            )}
 
             <div className="space-y-3">
               {options.map((opt: any) => {

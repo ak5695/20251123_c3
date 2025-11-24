@@ -66,6 +66,7 @@ export const questions = pgTable("questions", {
   mnemonic: text("mnemonic"),
   category: text("category"),
   keywords: text("keywords"), // JSON string array
+  image: text("image"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
