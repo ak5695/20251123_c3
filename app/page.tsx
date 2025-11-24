@@ -4,6 +4,7 @@ import { authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   BookOpen,
   FileText,
@@ -13,6 +14,7 @@ import {
   Star,
   AlertTriangle,
   BarChart,
+  LogOut,
 } from "lucide-react";
 
 export default function Dashboard() {
@@ -25,7 +27,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!isPending && !session) {
-      router.push("/sign-up");
+      router.push("/sign-in");
     }
   }, [session, isPending, router]);
 
@@ -37,6 +39,11 @@ export default function Dashboard() {
         .catch(console.error);
     }
   }, [session]);
+
+  const handleSignOut = async () => {
+    await authClient.signOut();
+    router.push("/sign-in");
+  };
 
   if (isPending)
     return (
@@ -89,8 +96,11 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-      <header className="bg-white p-4 shadow-sm sticky top-0 z-10">
-        <h1 className="text-lg font-bold text-center">C3安考宝典</h1>
+      <header className="bg-white p-4 shadow-sm sticky top-0 z-10 flex justify-between items-center">
+        <h1 className="text-lg font-bold">C3安考宝典</h1>
+        <Button variant="ghost" size="icon" onClick={handleSignOut}>
+          <LogOut className="w-5 h-5 text-gray-500" />
+        </Button>
       </header>
 
       <main className="p-4 space-y-6">
