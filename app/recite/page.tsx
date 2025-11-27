@@ -28,7 +28,13 @@ function ReciteContent() {
 
 export default function RecitePage() {
   return (
-    <Suspense fallback={<div className="flex h-screen items-center justify-center">加载中...</div>}>
+    <Suspense
+      fallback={
+        <div className="flex h-screen items-center justify-center">
+          加载中...
+        </div>
+      }
+    >
       <ReciteContent />
     </Suspense>
   );

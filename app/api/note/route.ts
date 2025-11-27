@@ -47,3 +47,37 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ success: true });
 }
+
+export async function DELETE(req: NextRequest) {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = await req.json();
+  const { questionId } = body;
+
+  if (!questionId) {
+    return NextResponse.json(
+      { error: "Question ID is required" },
+      { status: 400 }
+    );
+  }
+
+  await db
+    .update(userQuestionState)
+    .set({
+      note: null,
+    })
+    .where(
+      and(
+        eq(userQuestionState.userId, session.user.id),
+        eq(userQuestionState.questionId, questionId)
+      )
+    );
+
+  return NextResponse.json({ success: true });
+}

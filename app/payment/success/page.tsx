@@ -33,12 +33,12 @@ function SuccessContent() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen p-4">
+    <div className="flex items-center justify-center min-h-screen p-4 bg-gray-50">
       <Card className="w-full max-w-md mx-auto">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
             <Image
-              src="/logo.jpg"
+              src="/logo.png"
               alt="C3安考宝典"
               width={80}
               height={80}
@@ -85,7 +85,13 @@ function SuccessContent() {
 
 export default function SuccessPage() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">加载中...</div>}>
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center min-h-screen">
+          加载中...
+        </div>
+      }
+    >
       <SuccessContent />
     </Suspense>
   );

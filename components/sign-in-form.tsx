@@ -57,13 +57,9 @@ export function SignInForm() {
     <Card className="w-full max-w-sm mx-auto">
       <CardHeader className="text-center">
         <div className="flex justify-center mb-4">
-          <Image
-            src="/logo.jpg"
-            alt="C3安考宝典"
-            width={80}
-            height={80}
-            className="rounded-lg"
-          />
+                    <Image
+            src="/logo.png"
+            alt="Logo"
         </div>
         <CardTitle className="text-2xl">登录</CardTitle>
       </CardHeader>

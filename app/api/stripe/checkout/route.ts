@@ -32,20 +32,31 @@ export async function POST(req: Request) {
       return new NextResponse("User not found", { status: 404 });
     }
 
-    const checkoutSession = await stripe.checkout.sessions.create({
-      line_items: [
-        {
-          price_data: {
-            currency: "cny",
-            product_data: {
-              name: "2个月会员订阅",
-              description: "解锁所有题目和高级功能",
+    const priceId = process.env.STRIPE_PRICE_ID;
+    
+    const line_items = priceId 
+      ? [
+          {
+            price: priceId,
+            quantity: 1,
+          }
+        ]
+      : [
+          {
+            price_data: {
+              currency: "cny",
+              product_data: {
+                name: "2个月会员订阅",
+                description: "解锁所有题目和高级功能",
+              },
+              unit_amount: 990, // 9.90 CNY
             },
-            unit_amount: 990, // 9.90 CNY
+            quantity: 1,
           },
-          quantity: 1,
-        },
-      ],
+        ];
+
+    const checkoutSession = await stripe.checkout.sessions.create({
+      line_items,
       mode: "payment",
       success_url: `${
         process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"

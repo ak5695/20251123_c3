@@ -7,9 +7,9 @@ export const metadata: Metadata = {
   title: "广东C3安考宝典",
   description: "广东C3安考宝典",
   icons: {
-    icon: "/logo.jpg",
-    shortcut: "/logo.jpg",
-    apple: "/logo.jpg",
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
   },
 };
 

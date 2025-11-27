@@ -28,7 +28,9 @@ import {
   Star,
   Pause,
   Play,
+  Trash2,
   Bookmark,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -111,12 +113,15 @@ const getFilterLabel = (filter?: string) => {
   }
 };
 
+import { useRouter } from "next/navigation";
+
 export function QuizView({
   mode,
   category,
   filterType,
   isPaid = false,
 }: QuizViewProps) {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -136,7 +141,7 @@ export function QuizView({
   );
   const [detailIndex, setDetailIndex] = useState<number | null>(null);
   const [showAllAnswers, setShowAllAnswers] = useState(
-    mode === "category" || !!filterType
+    mode === "category" || mode === "notes" || !!filterType
   );
   const [totalCount, setTotalCount] = useState(0);
   const limit = 50;
@@ -413,6 +418,8 @@ export function QuizView({
 
   // 状态管理函数
   const toggleCollection = async (questionId: number) => {
+    if (!checkSubscription()) return;
+
     const currentQuestion = questions.find((q) => q.id === questionId);
     if (!currentQuestion) return;
 
@@ -467,6 +474,8 @@ export function QuizView({
   };
 
   const toggleRecited = async (questionId: number) => {
+    if (!checkSubscription()) return;
+
     const currentQuestion = questions.find((q) => q.id === questionId);
     if (!currentQuestion) return;
 
@@ -613,7 +622,7 @@ export function QuizView({
         setResults(state.results);
         setTotalCount(state.questions.length);
         setLoading(false);
-        setIsPaused(true); // Start paused when resuming
+        setIsPaused(false); // Resume immediately
 
         // Prevent fetching new questions
         skipFetchRef.current = true;
@@ -1022,6 +1031,32 @@ export function QuizView({
     }
   };
 
+  const handleDeleteNote = async (questionId: number) => {
+    if (!confirm("确定要删除这条笔记吗？")) return;
+
+    // Optimistic update
+    setQuestions((prev) => prev.filter((q) => q.id !== questionId));
+    setTotalCount((prev) => prev - 1);
+
+    try {
+      const response = await fetch("/api/note", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ questionId }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to delete note");
+      }
+      toast.success("笔记已删除");
+    } catch (error) {
+      console.error("Delete note error:", error);
+      toast.error("删除失败");
+      // Revert (reload questions or just show error)
+      // For simplicity, we might just reload or let the user refresh if it failed
+    }
+  };
+
   const handleMockSubmit = async () => {
     clearMockProgress();
     let score = 0;
@@ -1233,6 +1268,13 @@ export function QuizView({
       <div className="flex items-center justify-center h-screen bg-gray-50">
         <AlertDialog open={showResumeDialog} onOpenChange={setShowResumeDialog}>
           <AlertDialogContent>
+            <button
+              onClick={() => router.back()}
+              className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground"
+            >
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </button>
             <AlertDialogHeader>
               <AlertDialogTitle>恢复考试</AlertDialogTitle>
               <AlertDialogDescription>
@@ -1353,27 +1395,17 @@ export function QuizView({
         <Button
           variant="ghost"
           size="icon"
+          className="active:scale-90 transition-transform"
           onClick={() => {
             if (viewMode === "list" && detailIndex !== null) {
-              // 返回列表时，不需要手动保存位置，因为我们希望恢复到进入时的位置
-              // 或者如果用户在详情页翻页了，我们希望回到新的位置？
-              // 目前逻辑是：进入详情页时保存了位置。
-              // 如果在详情页翻页了，currentIndex变了。
-              // 返回时，我们应该回到currentIndex对应的位置。
+              // 返回列表时，保存当前的位置（页码和题目索引）
+              // 如果在详情页翻页了，offset和currentIndex都会更新
+              // 我们希望回到列表时定位到当前正在看的题目
 
-              // 让我们更新一下保存的位置，把questionIndex更新为当前的currentIndex
-              // 但是scrollTop应该怎么处理？
-              // 如果题目变了，原来的scrollTop可能不准确。
-              // 最好是让restorePosition去处理滚动到currentIndex
-
-              // 读取之前保存的scrollTop，以便尽可能保持上下文（如果是同一题）
-              // 但如果是不同题，scrollIntoView会自动处理
-
-              const saved = loadSavedPosition();
-              if (saved) {
-                // 更新索引为当前浏览的题目
-                savePosition(saved.offset, currentIndex, saved.scrollTop);
-              }
+              // 如果是第一题，滚动到顶部(0)
+              // 如果不是第一题，我们不知道具体的scrollTop，设为-1让restorePosition使用scrollIntoView
+              const targetScrollTop = currentIndex === 0 ? 0 : -1;
+              savePosition(offset, currentIndex, targetScrollTop);
 
               setDetailIndex(null);
               // 触发一次恢复逻辑
@@ -1399,9 +1431,11 @@ export function QuizView({
                 ? "试题收藏"
                 : mode === "notes"
                 ? "我的笔记"
+                : mode === "category" && !category
+                ? "全部题库"
                 : "练习")}
           </span>
-          {category && filterType && filterType !== "all" && (
+          {filterType && filterType !== "all" && (
             <span className="text-base font-bold text-muted-foreground bg-secondary/50 px-1.5 py-0.5 rounded-md whitespace-nowrap flex-shrink-0">
               {getFilterLabel(filterType)}
             </span>
@@ -1502,7 +1536,7 @@ export function QuizView({
                 className="scroll-mt-24"
               >
                 <Card
-                  className="p-2 cursor-pointer hover:shadow-md transition-shadow gap-0"
+                  className="p-2 cursor-pointer hover:shadow-md transition-all active:scale-[0.98] gap-0"
                   onClick={() => {
                     // 标记正在导航到详情页，阻止handleScroll和cleanup保存错误的位置
                     isNavigatingToDetailRef.current = true;
@@ -1601,96 +1635,111 @@ export function QuizView({
                   )}
 
                   {/* 收藏和背诵控制区域 - 移到外层 */}
-                  <div className="mt-0 flex items-center gap-3">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleCollection(q.id);
-                      }}
-                      className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                        q.isCollected
-                          ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
-                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                      }`}
-                    >
-                      {q.isCollected ? (
-                        <>
-                          <svg
-                            className="w-3 h-3"
-                            fill="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                          </svg>
-                          已收藏
-                        </>
-                      ) : (
-                        <>
-                          <svg
-                            className="w-3 h-3"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
-                            />
-                          </svg>
-                          未收藏
-                        </>
-                      )}
-                    </button>
+                  <div className="mt-0 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleCollection(q.id);
+                        }}
+                        className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-all active:scale-95 ${
+                          q.isCollected
+                            ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
+                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        }`}
+                      >
+                        {q.isCollected ? (
+                          <>
+                            <svg
+                              className="w-3 h-3"
+                              fill="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                            </svg>
+                            已收藏
+                          </>
+                        ) : (
+                          <>
+                            <svg
+                              className="w-3 h-3"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
+                              />
+                            </svg>
+                            未收藏
+                          </>
+                        )}
+                      </button>
 
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleRecited(q.id);
-                      }}
-                      className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                        q.isRecited
-                          ? "bg-green-100 text-green-700 hover:bg-green-200"
-                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                      }`}
-                    >
-                      {q.isRecited ? (
-                        <>
-                          <svg
-                            className="w-3 h-3"
-                            fill="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          已浏览
-                        </>
-                      ) : (
-                        <>
-                          <svg
-                            className="w-3 h-3"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                            />
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                            />
-                          </svg>
-                          标记浏览
-                        </>
-                      )}
-                    </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleRecited(q.id);
+                        }}
+                        className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-all active:scale-95 ${
+                          q.isRecited
+                            ? "bg-green-100 text-green-700 hover:bg-green-200"
+                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        }`}
+                      >
+                        {q.isRecited ? (
+                          <>
+                            <svg
+                              className="w-3 h-3"
+                              fill="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            已浏览
+                          </>
+                        ) : (
+                          <>
+                            <svg
+                              className="w-3 h-3"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                              />
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                              />
+                            </svg>
+                            标记浏览
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {mode === "notes" && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteNote(q.id);
+                        }}
+                        className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-all active:scale-95 bg-red-100 text-red-600 hover:bg-red-200"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        删除
+                      </button>
+                    )}
                   </div>
                 </Card>
               </div>
@@ -1741,7 +1790,7 @@ export function QuizView({
                 return (
                   <div
                     key={opt.label}
-                    className={`flex items-center p-3 border rounded-lg cursor-pointer transition-colors ${optionStyle}`}
+                    className={`flex items-center p-3 border rounded-lg cursor-pointer transition-all active:scale-[0.98] ${optionStyle}`}
                     onClick={() =>
                       !isReciteMode && handleOptionSelect(opt.label)
                     }

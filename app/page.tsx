@@ -17,10 +17,20 @@ import {
   FileText,
   BarChart,
   PenTool,
+  Crown,
+  User,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import Image from "next/image";
 import { useQuery } from "@tanstack/react-query";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Separator } from "@/components/ui/separator";
+import { toast } from "sonner";
 
 interface CategoryStats {
   category: string;
@@ -33,9 +43,29 @@ interface CategoryStats {
   unviewed: number;
 }
 
+interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  image?: string;
+  isPaid: boolean;
+  subscriptionExpiresAt?: string;
+}
+
 export default function Dashboard() {
   const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
+
+  const { data: userProfile, isLoading: isProfileLoading } =
+    useQuery<UserProfile>({
+      queryKey: ["user-profile"],
+      queryFn: async () => {
+        const res = await fetch("/api/user/profile");
+        if (!res.ok) throw new Error("Failed to fetch profile");
+        return res.json();
+      },
+      enabled: !!session,
+    });
 
   const { data: stats = [], isLoading: isStatsLoading } = useQuery<
     CategoryStats[]
@@ -58,6 +88,25 @@ export default function Dashboard() {
   const handleSignOut = async () => {
     await authClient.signOut();
     router.push("/sign-in");
+  };
+
+  const handleSubscribe = async () => {
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+      });
+      if (res.ok) {
+        const { url } = await res.json();
+        window.location.href = url;
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        console.error("Subscription failed:", errorData);
+        toast.error(`无法启动支付: ${errorData.error || "请稍后重试"}`);
+      }
+    } catch (error) {
+      console.error("Subscription error:", error);
+      toast.error("发生错误");
+    }
   };
 
   const navigateToQuiz = (category: string, filterType: string) => {
@@ -97,7 +146,7 @@ export default function Dashboard() {
   }) => (
     <button
       onClick={onClick}
-      className={`flex flex-col items-center justify-center p-1 rounded hover:bg-gray-50 transition-colors w-full ${bgColor} bg-opacity-20`}
+      className={`flex flex-col items-center justify-center p-1 rounded hover:bg-gray-50 transition-all active:scale-95 w-full ${bgColor} bg-opacity-20`}
     >
       <span className={`text-sm font-bold ${color}`}>{value}</span>
       <span className="text-[10px] text-gray-500">{label}</span>
@@ -128,33 +177,108 @@ export default function Dashboard() {
     },
   ];
 
+  const userInitial = (session.user.name || session.user.email || "U")
+    .charAt(0)
+    .toUpperCase();
+  const isPaid = userProfile?.isPaid || false;
+
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       <header className="bg-white p-3 shadow-sm sticky top-0 z-10 flex justify-between items-center">
         <div className="flex items-center gap-2">
-          <Image
-            src="/logo.jpg" // 确保路径正确，public目录下的文件需要以/开头
-            alt="网站logo" // 添加alt属性提高可访问性
-            width={40} // size-5对应20px
-            height={40} // size-5对应20px
-            className="size-10 object-contain" // 添加object-contain确保图片正确显示
-            priority={false} // 非关键图片设置为false
+                    <Image
+            src="/logo.png"
+            alt="C3安考宝典"
+            width={40}
+            height={40}
+            className="size-10 object-contain"
+            priority={false}
           />
           <h1 className="text-lg font-bold">广东C3安考宝典</h1>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-600">
-            {session.user.name || session.user.email}
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleSignOut}
-            className="text-gray-500 h-8 w-8"
-          >
-            <LogOut className="w-4 h-4" />
-          </Button>
+          <Popover>
+            <PopoverTrigger asChild>
+              <div className="flex items-center gap-2 cursor-pointer">
+                <div className="relative">
+                  <Avatar className="h-9 w-9 border-2 border-white shadow-sm">
+                    <AvatarImage src={session.user.image || ""} />
+                    <AvatarFallback className="bg-primary/10 text-primary font-bold">
+                      {userInitial}
+                    </AvatarFallback>
+                  </Avatar>
+                  {isPaid && (
+                    <div className="absolute -bottom-1 -right-1 bg-yellow-400 rounded-full p-0.5 border-2 border-white">
+                      <Crown className="w-3 h-3 text-white fill-white" />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-0" align="end">
+              <div className="p-4 flex flex-col items-center gap-3 bg-gradient-to-b from-gray-50 to-white">
+                <Avatar className="h-16 w-16 border-4 border-white shadow-md">
+                  <AvatarImage src={session.user.image || ""} />
+                  <AvatarFallback className="bg-primary/10 text-primary text-2xl font-bold">
+                    {userInitial}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="text-center">
+                  <div className="font-bold text-lg truncate max-w-[200px]">
+                    {session.user.name || "用户"}
+                  </div>
+                  <div className="text-xs text-gray-500 truncate max-w-[200px]">
+                    {session.user.email}
+                  </div>
+                </div>
+
+                {isPaid ? (
+                  <div className="flex flex-col items-center gap-1 bg-yellow-50 px-4 py-2 rounded-full border border-yellow-100">
+                    <div className="flex items-center gap-1 text-yellow-700 font-bold text-sm">
+                      <Crown className="w-4 h-4 fill-yellow-700" />
+                      <span>尊贵会员</span>
+                    </div>
+                    {userProfile?.subscriptionExpiresAt && (
+                      <div className="text-[10px] text-yellow-600/80">
+                        到期:{" "}
+                        {new Date(
+                          userProfile.subscriptionExpiresAt
+                        ).toLocaleDateString()}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-2 w-full">
+                    <div className="text-xs text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                      普通用户
+                    </div>
+                    <Button
+                      size="sm"
+                      className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white border-none shadow-md"
+                      onClick={handleSubscribe}
+                    >
+                      <Crown className="w-4 h-4 mr-1" />
+                      升级会员
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              <div className="p-2">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
+                  onClick={handleSignOut}
+                >
+                  <LogOut className="w-4 h-4 mr-2" />
+                  退出登录
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       </header>
 
@@ -164,7 +288,7 @@ export default function Dashboard() {
           {topActions.map((action) => (
             <Card
               key={action.label}
-              className="cursor-pointer hover:shadow-md transition-shadow border-none shadow-sm py-2"
+              className="cursor-pointer hover:shadow-md transition-all active:scale-95 border-none shadow-sm py-2"
               onClick={() => router.push(action.href)}
             >
               <CardContent className="flex flex-col items-center justify-center p-0 gap-2">
