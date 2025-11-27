@@ -186,7 +186,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gray-50 pb-20">
       <header className="bg-white p-3 shadow-sm sticky top-0 z-10 flex justify-between items-center">
         <div className="flex items-center gap-2">
-                    <Image
+          <Image
             src="/logo.png"
             alt="C3安考宝典"
             width={40}

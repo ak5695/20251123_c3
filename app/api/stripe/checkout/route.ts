@@ -33,13 +33,13 @@ export async function POST(req: Request) {
     }
 
     const priceId = process.env.STRIPE_PRICE_ID;
-    
-    const line_items = priceId 
+
+    const line_items = priceId
       ? [
           {
             price: priceId,
             quantity: 1,
-          }
+          },
         ]
       : [
           {
