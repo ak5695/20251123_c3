@@ -6,16 +6,13 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 
-const stripe = new Stripe(
-  process.env.STRIPE_SECRET_KEY!,
-  {
-    apiVersion: "2024-11-20.acacia" as any,
-    typescript: true,
-    maxNetworkRetries: 3,
-    timeout: 30000, // 30s timeout
-    httpClient: Stripe.createFetchHttpClient(), // Use native fetch
-  }
-);
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: "2024-11-20.acacia" as any,
+  typescript: true,
+  maxNetworkRetries: 3,
+  timeout: 30000, // 30s timeout
+  httpClient: Stripe.createFetchHttpClient(), // Use native fetch
+});
 
 export async function POST(req: Request) {
   try {

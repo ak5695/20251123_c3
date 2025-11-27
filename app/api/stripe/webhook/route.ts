@@ -5,14 +5,11 @@ import { db } from "@/lib/db";
 import { user } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
-const stripe = new Stripe(
-  process.env.STRIPE_SECRET_KEY!,
-  {
-    apiVersion: "2024-11-20.acacia" as any,
-    typescript: true,
-    httpClient: Stripe.createFetchHttpClient(),
-  }
-);
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: "2024-11-20.acacia" as any,
+  typescript: true,
+  httpClient: Stripe.createFetchHttpClient(),
+});
 
 export async function POST(req: Request) {
   const body = await req.text();

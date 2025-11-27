@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { QuizView } from "@/components/quiz-view";
-import { BookOpen, AlertTriangle, Star, Layers } from "lucide-react";
+import { BookOpen, AlertTriangle, Star, Layers, Loader2 } from "lucide-react";
 
-export default function CategoryPage() {
+function CategoryContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const category = searchParams.get("category") || "";
@@ -80,5 +80,19 @@ export default function CategoryPage() {
       </div>
       <QuizView mode="recite" category={category} />
     </div>
+  );
+}
+
+export default function CategoryPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-screen items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      }
+    >
+      <CategoryContent />
+    </Suspense>
   );
 }
