@@ -64,9 +64,13 @@ export function SignUpForm() {
     <Card className="w-full max-w-sm mx-auto">
       <CardHeader className="text-center">
         <div className="flex justify-center mb-4">
-                    <Image
+          <Image
             src="/logo.png"
             alt="Logo"
+            width={80}
+            height={80}
+            className="rounded-lg"
+          />
         </div>
         <CardTitle className="text-2xl">注册</CardTitle>
       </CardHeader>
