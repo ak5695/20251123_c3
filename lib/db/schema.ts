@@ -12,6 +12,9 @@ export const user = pgTable("user", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("emailVerified").notNull().default(false),
   image: text("image"),
+  isPaid: boolean("isPaid").notNull().default(false),
+  subscriptionExpiresAt: timestamp("subscriptionExpiresAt"),
+  stripeCustomerId: text("stripeCustomerId"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 });
@@ -96,10 +99,13 @@ export const userQuestionState = pgTable("user_question_state", {
     .notNull()
     .references(() => questions.id),
   isCollected: boolean("isCollected").default(false).notNull(),
+  isRecited: boolean("isRecited").default(false).notNull(),
   wrongCount: integer("wrongCount").default(0).notNull(),
   correctCount: integer("correctCount").default(0).notNull(),
   note: text("note"),
   lastAnsweredAt: timestamp("lastAnsweredAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export const mockExamScores = pgTable("mock_exam_scores", {
@@ -113,4 +119,21 @@ export const mockExamScores = pgTable("mock_exam_scores", {
   totalQuestions: integer("totalQuestions").notNull(),
   correctCount: integer("correctCount").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const subscriptions = pgTable("subscriptions", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("userId")
+    .notNull()
+    .references(() => user.id),
+  stripeSessionId: text("stripeSessionId").unique(),
+  stripePaymentIntentId: text("stripePaymentIntentId"),
+  amount: integer("amount").notNull(), // 分为单位
+  currency: text("currency").notNull().default("cny"),
+  status: text("status").notNull().default("pending"), // pending, completed, expired
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

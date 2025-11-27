@@ -36,6 +36,7 @@ export async function GET(req: NextRequest) {
           category: questions.category,
           image: questions.image,
           isCollected: userQuestionState.isCollected,
+          isRecited: userQuestionState.isRecited,
           note: userQuestionState.note,
           isPracticed: sql<boolean>`COALESCE(${userQuestionState.correctCount}, 0) > 0 OR COALESCE(${userQuestionState.wrongCount}, 0) > 0`,
         })
@@ -63,6 +64,7 @@ export async function GET(req: NextRequest) {
           category: questions.category,
           image: questions.image,
           isCollected: userQuestionState.isCollected,
+          isRecited: userQuestionState.isRecited,
           note: userQuestionState.note,
           isPracticed: sql<boolean>`COALESCE(${userQuestionState.correctCount}, 0) > 0 OR COALESCE(${userQuestionState.wrongCount}, 0) > 0`,
         })
@@ -90,6 +92,7 @@ export async function GET(req: NextRequest) {
           category: questions.category,
           image: questions.image,
           isCollected: userQuestionState.isCollected,
+          isRecited: userQuestionState.isRecited,
           note: userQuestionState.note,
           isPracticed: sql<boolean>`COALESCE(${userQuestionState.correctCount}, 0) > 0 OR COALESCE(${userQuestionState.wrongCount}, 0) > 0`,
         })
@@ -122,6 +125,7 @@ export async function GET(req: NextRequest) {
       category: questions.category,
       image: questions.image,
       isCollected: userQuestionState.isCollected,
+      isRecited: userQuestionState.isRecited,
       note: userQuestionState.note,
       isPracticed: sql<boolean>`COALESCE(${userQuestionState.correctCount}, 0) > 0 OR COALESCE(${userQuestionState.wrongCount}, 0) > 0`,
     })

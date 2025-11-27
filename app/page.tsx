@@ -181,6 +181,29 @@ export default function Dashboard() {
           </div>
         </div>
       </main>
+
+      <footer className="bg-white border-t p-4 text-center">
+        <div className="flex justify-center space-x-4 text-xs text-gray-500">
+          <a href="/terms" className="hover:text-blue-500">
+            服务条款
+          </a>
+          <span>|</span>
+          <a href="/privacy" className="hover:text-blue-500">
+            隐私政策
+          </a>
+          <span>|</span>
+          <a href="/refund" className="hover:text-blue-500">
+            退款政策
+          </a>
+          <span>|</span>
+          <a href="/support" className="hover:text-blue-500">
+            客服支持
+          </a>
+        </div>
+        <p className="text-xs text-gray-400 mt-2">
+          © 2024 C3安考宝典. All rights reserved.
+        </p>
+      </footer>
     </div>
   );
 }

@@ -15,6 +15,7 @@ import { authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import Link from "next/link";
+import Image from "next/image";
 
 export function SignInForm() {
   const [email, setEmail] = useState("");
@@ -54,7 +55,16 @@ export function SignInForm() {
 
   return (
     <Card className="w-full max-w-sm mx-auto">
-      <CardHeader>
+      <CardHeader className="text-center">
+        <div className="flex justify-center mb-4">
+          <Image
+            src="/logo.jpg"
+            alt="C3安考宝典"
+            width={80}
+            height={80}
+            className="rounded-lg"
+          />
+        </div>
         <CardTitle className="text-2xl">登录</CardTitle>
       </CardHeader>
       <form onSubmit={handleSubmit}>

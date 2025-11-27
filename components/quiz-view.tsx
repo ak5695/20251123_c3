@@ -71,6 +71,10 @@ interface Question {
   note: string | null;
   image: string | null;
   isPracticed?: boolean;
+  // 全局状态：①未做 ②做对/做错 ③收藏过 ④背诵过
+  status?: "unanswered" | "correct" | "incorrect";
+  isRecited?: boolean;
+  lastAnswered?: string; // 用户上次答案
 }
 
 interface QuizViewProps {
@@ -95,8 +99,141 @@ export function QuizView({ mode, category }: QuizViewProps) {
   const [showAllAnswers, setShowAllAnswers] = useState(mode === "category");
   const [totalCount, setTotalCount] = useState(0);
   const limit = 50;
+
+  // 位置记录相关 - 重新设计
+  const getPositionKey = () => {
+    return `quiz-position-${mode}-${category || "all"}`;
+  };
+
+  // 保存位置：同时保存页码、题目索引和滚动位置
+  const savePosition = (
+    pageOffset: number,
+    questionIndex: number = 0,
+    scrollTop?: number
+  ) => {
+    const positionData = {
+      offset: pageOffset,
+      questionIndex,
+      scrollTop:
+        scrollTop ||
+        document.documentElement.scrollTop ||
+        document.body.scrollTop ||
+        0,
+      timestamp: Date.now(),
+    };
+    localStorage.setItem(getPositionKey(), JSON.stringify(positionData));
+    console.log("保存位置:", positionData);
+  };
+
+  const loadSavedPosition = () => {
+    try {
+      const saved = localStorage.getItem(getPositionKey());
+      if (saved) {
+        const positionData = JSON.parse(saved);
+        console.log("加载保存位置:", positionData);
+        return positionData;
+      }
+    } catch (error) {
+      console.error("Failed to load saved position:", error);
+    }
+    return null;
+  };
+
+  // 恢复位置函数
+  const restorePosition = (positionData: any) => {
+    if (!positionData) return;
+
+    console.log("尝试恢复位置:", positionData);
+
+    // 方法1: 尝试滚动到具体题目
+    if (positionData.questionIndex < questions.length) {
+      const targetElement = questionRefs.current[positionData.questionIndex];
+      if (targetElement) {
+        console.log("使用题目元素滚动");
+        setTimeout(() => {
+          targetElement.scrollIntoView({
+            behavior: "auto", // 使用瞬时滚动，避免动画干扰
+            block: "start",
+          });
+        }, 200);
+        return;
+      }
+    }
+
+    // 方法2: 使用保存的滚动位置
+    if (positionData.scrollTop > 0) {
+      console.log("使用滚动位置恢复");
+      setTimeout(() => {
+        window.scrollTo({
+          top: positionData.scrollTop,
+          behavior: "auto",
+        });
+      }, 300);
+    }
+  };
   const skipFetchRef = useRef(false);
   const navigationRef = useRef<"start" | "end" | null>(null);
+  const questionRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const shouldScrollToPosition = useRef(false);
+  const [visibleQuestionIndex, setVisibleQuestionIndex] = useState(0);
+  const lastSavedPositionRef = useRef<any>(null);
+
+  // 页面离开时保存位置 + 滚动事件监听
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (viewMode === "list") {
+        const currentScrollTop =
+          document.documentElement.scrollTop || document.body.scrollTop;
+        savePosition(offset, visibleQuestionIndex, currentScrollTop);
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden && viewMode === "list") {
+        const currentScrollTop =
+          document.documentElement.scrollTop || document.body.scrollTop;
+        savePosition(offset, visibleQuestionIndex, currentScrollTop);
+      }
+    };
+
+    // 滚动事件监听 - 定期保存位置
+    let scrollTimeout: NodeJS.Timeout;
+    const handleScroll = () => {
+      if (viewMode === "list") {
+        clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(() => {
+          const currentScrollTop =
+            document.documentElement.scrollTop || document.body.scrollTop;
+          // 计算当前可见的大致题目索引
+          const estimatedIndex = Math.floor(currentScrollTop / 150); // 假设每题150px高度
+          const actualIndex = Math.min(estimatedIndex, questions.length - 1);
+          savePosition(offset, Math.max(0, actualIndex), currentScrollTop);
+          console.log("滚动保存位置:", {
+            offset,
+            actualIndex,
+            currentScrollTop,
+          });
+        }, 1000); // 1秒后保存，防止频繁保存
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("scroll", handleScroll);
+      clearTimeout(scrollTimeout);
+      // 组件卸载时保存位置
+      if (viewMode === "list") {
+        const currentScrollTop =
+          document.documentElement.scrollTop || document.body.scrollTop;
+        savePosition(offset, visibleQuestionIndex, currentScrollTop);
+      }
+    };
+  }, [viewMode, offset, visibleQuestionIndex, questions.length]);
 
   const [isConfiguring, setIsConfiguring] = useState(false);
   const [quizConfig, setQuizConfig] = useState({
@@ -146,6 +283,72 @@ export function QuizView({ mode, category }: QuizViewProps) {
   const [answeredQuestions, setAnsweredQuestions] = useState<
     Record<number, boolean>
   >({});
+
+  // 状态管理函数
+  const toggleCollection = async (questionId: number) => {
+    try {
+      const currentQuestion = questions.find((q) => q.id === questionId);
+      const newIsCollected = !currentQuestion?.isCollected;
+
+      const response = await fetch("/api/collect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ questionId, isCollected: newIsCollected }),
+      });
+
+      if (response.ok) {
+        setQuestions((prev) =>
+          prev.map((q) =>
+            q.id === questionId ? { ...q, isCollected: newIsCollected } : q
+          )
+        );
+      }
+    } catch (error) {
+      console.error("Toggle collection error:", error);
+    }
+  };
+
+  const toggleRecited = async (questionId: number) => {
+    try {
+      const currentQuestion = questions.find((q) => q.id === questionId);
+      const newIsRecited = !currentQuestion?.isRecited;
+
+      const response = await fetch("/api/collect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ questionId, isRecited: newIsRecited }),
+      });
+
+      if (response.ok) {
+        setQuestions((prev) =>
+          prev.map((q) =>
+            q.id === questionId ? { ...q, isRecited: newIsRecited } : q
+          )
+        );
+      }
+    } catch (error) {
+      console.error("Toggle recited error:", error);
+    }
+  };
+
+  const updateQuestionStatus = (
+    questionId: number,
+    userAnswer: string,
+    correctAnswer: string
+  ) => {
+    const isCorrect = userAnswer === correctAnswer;
+    setQuestions((prev) =>
+      prev.map((q) =>
+        q.id === questionId
+          ? {
+              ...q,
+              status: isCorrect ? "correct" : "incorrect",
+              lastAnswered: userAnswer,
+            }
+          : q
+      )
+    );
+  };
 
   const [allUserAnswers, setAllUserAnswers] = useState<
     Record<number, string[]>
@@ -382,6 +585,71 @@ export function QuizView({ mode, category }: QuizViewProps) {
     fetchQuestions();
   }, [mode, category, offset, viewMode, quizParams, isCheckingResume]);
 
+  // 位置恢复 - 只在进入list模式且第一次加载时执行
+  useEffect(() => {
+    if (viewMode === "list" && !isCheckingResume && questions.length === 0) {
+      const savedPosition = loadSavedPosition();
+      if (savedPosition && savedPosition.offset !== offset) {
+        shouldScrollToPosition.current = true;
+        setOffset(savedPosition.offset);
+        // offset改变会触发重新fetch，然后在数据加载后设置detailIndex
+        return;
+      } else if (savedPosition && savedPosition.offset === offset) {
+        // 如果offset相同但是首次加载，也需要滚动
+        shouldScrollToPosition.current = true;
+      }
+    }
+  }, [viewMode, mode, category]);
+
+  // 在questions加载完成后滚动到保存的题目位置
+  useEffect(() => {
+    console.log("Scroll effect triggered:", {
+      viewMode,
+      questionsLength: questions.length,
+      shouldScroll: shouldScrollToPosition.current,
+    });
+
+    if (
+      viewMode === "list" &&
+      questions.length > 0 &&
+      shouldScrollToPosition.current
+    ) {
+      const savedPosition = loadSavedPosition();
+      console.log("Saved position:", savedPosition);
+      console.log("Current offset:", offset);
+
+      if (
+        savedPosition &&
+        savedPosition.offset === offset &&
+        savedPosition.questionIndex < questions.length
+      ) {
+        console.log(
+          "Attempting to scroll to index:",
+          savedPosition.questionIndex
+        );
+
+        // 增加更长的延迟以确保DOM完全渲染
+        setTimeout(() => {
+          const targetElement =
+            questionRefs.current[savedPosition.questionIndex];
+          console.log("Target element:", targetElement);
+          console.log("All refs:", questionRefs.current);
+
+          if (targetElement) {
+            console.log("Scrolling to element");
+            targetElement.scrollIntoView({
+              behavior: "smooth",
+              block: "start",
+            });
+          } else {
+            console.warn("Target element not found, refs not ready yet");
+          }
+          shouldScrollToPosition.current = false;
+        }, 500); // 增加到500ms
+      }
+    }
+  }, [questions, viewMode, offset]);
+
   // Reset state when changing questions
   useEffect(() => {
     const question = questions[currentIndex];
@@ -409,6 +677,46 @@ export function QuizView({ mode, category }: QuizViewProps) {
       }
     }
   }, [currentIndex, questions, allUserAnswers, mode]);
+
+  // 设置Intersection Observer来跟踪可见的题目
+  useEffect(() => {
+    // 初始化refs数组
+    questionRefs.current = new Array(questions.length).fill(null);
+
+    if (viewMode === "list" && questions.length > 0) {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              const index = Number(
+                entry.target.getAttribute("data-question-index")
+              );
+              if (!isNaN(index)) {
+                setVisibleQuestionIndex(index);
+                // 保存当前可见题目的位置
+                savePosition(offset, index);
+              }
+            }
+          });
+        },
+        {
+          threshold: 0.5, // 当题目50%可见时触发
+          rootMargin: "-50px 0px -50px 0px", // 减少触发区域，更精确定位
+        }
+      );
+
+      // 观察所有题目元素
+      questionRefs.current.forEach((ref) => {
+        if (ref) {
+          observer.observe(ref);
+        }
+      });
+
+      return () => {
+        observer.disconnect();
+      };
+    }
+  }, [questions, viewMode, offset]);
 
   const currentQuestion = questions[currentIndex];
 
@@ -542,6 +850,13 @@ export function QuizView({ mode, category }: QuizViewProps) {
     const userAnswer = selectedAnswers.join("");
     const isCorrect = userAnswer === currentQuestion.answer;
 
+    // 更新题目状态
+    updateQuestionStatus(
+      currentQuestion.id,
+      userAnswer,
+      currentQuestion.answer
+    );
+
     setResults((prev) => [...prev, { id: currentQuestion.id, isCorrect }]);
     setAnsweredQuestions((prev) => ({ ...prev, [currentIndex]: isCorrect }));
 
@@ -590,21 +905,29 @@ export function QuizView({ mode, category }: QuizViewProps) {
 
   const handleRecitePrev = () => {
     if (currentIndex > 0) {
-      setCurrentIndex((prev) => prev - 1);
+      const newIndex = currentIndex - 1;
+      setCurrentIndex(newIndex);
       setDetailIndex((prev) => (prev !== null ? prev - 1 : null));
+      savePosition(offset, newIndex); // 保存新位置
     } else if (offset > 0) {
       navigationRef.current = "end";
-      setOffset(offset - limit);
+      const newOffset = offset - limit;
+      setOffset(newOffset);
+      savePosition(newOffset, 0); // 保存新页面位置
     }
   };
 
   const handleReciteNext = () => {
     if (currentIndex < questions.length - 1) {
-      setCurrentIndex((prev) => prev + 1);
+      const newIndex = currentIndex + 1;
+      setCurrentIndex(newIndex);
       setDetailIndex((prev) => (prev !== null ? prev + 1 : null));
+      savePosition(offset, newIndex); // 保存新位置
     } else if (hasMore) {
       navigationRef.current = "start";
-      setOffset(offset + limit);
+      const newOffset = offset + limit;
+      setOffset(newOffset);
+      savePosition(newOffset, 0); // 保存新页面位置
     }
   };
 
@@ -854,76 +1177,198 @@ export function QuizView({ mode, category }: QuizViewProps) {
       {/* Content */}
       <main className="flex-1 overflow-y-auto p-4">
         {viewMode === "list" && detailIndex === null ? (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {questions.map((q, i) => (
-              <Card
-                key={q.id}
-                className="p-4 cursor-pointer hover:shadow-md transition-shadow"
-                onClick={() => {
-                  setDetailIndex(i);
-                  setCurrentIndex(i);
+              <div
+                key={`${offset}-${i}-${q.id}`}
+                ref={(el) => {
+                  questionRefs.current[i] = el;
                 }}
+                data-question-index={i}
               >
-                <div className="flex gap-2">
-                  <span className="text-gray-500 min-w-8">
-                    {offset + i + 1}.
-                  </span>
-                  <div>
-                    <div className="mb-2 font-medium">{q.content}</div>
-                    {q.image && (
-                      <div className="mb-2">
-                        <img
-                          src={q.image}
-                          alt="Question Image"
-                          className="max-w-full h-auto rounded-lg"
-                        />
-                      </div>
-                    )}
-                    <div className="text-sm text-gray-500 flex gap-2">
+                <Card
+                  className="p-2 cursor-pointer hover:shadow-md transition-shadow gap-0"
+                  onClick={() => {
+                    setDetailIndex(i);
+                    setCurrentIndex(i);
+                    // 保存当前位置（包含滚动位置）
+                    const currentScrollTop =
+                      document.documentElement.scrollTop ||
+                      document.body.scrollTop;
+                    savePosition(offset, i, currentScrollTop);
+                  }}
+                >
+                  <div className="flex gap-2">
+                    <div className="flex flex-col items-center min-w-8">
+                      <span className="text-gray-500 mb-1">
+                        {offset + i + 1}.
+                      </span>
+                      {/* 题目类型标签 */}
                       <span
-                        className={
+                        className={`px-2 py-1 rounded text-xs font-medium ${
                           q.type === "SINGLE"
-                            ? "text-blue-500"
+                            ? "bg-blue-100 text-blue-600"
                             : q.type === "MULTIPLE"
-                            ? "text-purple-500"
-                            : "text-orange-500"
-                        }
+                            ? "bg-purple-100 text-purple-600"
+                            : "bg-orange-100 text-orange-600"
+                        }`}
                       >
                         {q.type === "SINGLE"
-                          ? "单选题"
+                          ? "单选"
                           : q.type === "MULTIPLE"
-                          ? "多选题"
-                          : "判断题"}
+                          ? "多选"
+                          : "判断"}
                       </span>
-                      {q.isPracticed && (
-                        <span className="text-green-500">已练习</span>
+                    </div>
+                    <div className="flex-1">
+                      {/* 做题状态标签区域 */}
+                      {(q.status === "correct" || q.status === "incorrect") && (
+                        <div className="flex items-center gap-2 mb-2">
+                          {q.status === "correct" && (
+                            <span className="px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-600">
+                              做对
+                            </span>
+                          )}
+                          {q.status === "incorrect" && (
+                            <span className="px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-600">
+                              做错
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* 题目内容 */}
+                      <div className="mb-2 font-medium">{q.content}</div>
+
+                      {/* 题目图片 */}
+                      {q.image && (
+                        <div className="mb-2">
+                          <img
+                            src={q.image}
+                            alt="Question Image"
+                            className="max-w-full h-auto rounded-lg"
+                          />
+                        </div>
+                      )}
+                      {/* 答案显示区域 */}
+                      <div className="mt-2 text-sm text-gray-600">
+                        {showAllAnswers ? (
+                          <>
+                            <span className="font-medium">答案: </span>
+                            {getAnswerText(q.options, q.answer)}
+                          </>
+                        ) : (
+                          <span className="text-gray-400 italic">
+                            答案已隐藏
+                          </span>
+                        )}
+                      </div>
+                      {showAllAnswers && q.note && (
+                        <div className="mt-1 text-sm text-blue-500">
+                          <span className="font-medium">笔记: </span>
+                          {q.note}
+                        </div>
                       )}
                     </div>
-                    <div className="mt-2 text-sm text-gray-600">
-                      {showAllAnswers ? (
+                  </div>
+
+                  {/* 记忆内容（绿色加粗） - 移到外层 */}
+                  {q.mnemonic && (
+                    <div className="mt-0 p-2 rounded">
+                      <span className="text-green-700 font-bold text-sm">
+                        记忆: {q.mnemonic}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* 收藏和背诵控制区域 - 移到外层 */}
+                  <div className="mt-0 flex items-center gap-3">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleCollection(q.id);
+                      }}
+                      className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                        q.isCollected
+                          ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      {q.isCollected ? (
                         <>
-                          <span className="font-medium">答案: </span>
-                          {getAnswerText(q.options, q.answer)}
+                          <svg
+                            className="w-3 h-3"
+                            fill="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                          </svg>
+                          已收藏
                         </>
                       ) : (
-                        <span className="text-gray-400 italic">答案已隐藏</span>
+                        <>
+                          <svg
+                            className="w-3 h-3"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
+                            />
+                          </svg>
+                          收藏
+                        </>
                       )}
-                    </div>
-                    {showAllAnswers && q.mnemonic && (
-                      <div className="mt-1 text-sm text-gray-500">
-                        <span className="font-medium">记忆: </span>
-                        {q.mnemonic}
-                      </div>
-                    )}
-                    {showAllAnswers && q.note && (
-                      <div className="mt-1 text-sm text-blue-500">
-                        <span className="font-medium">笔记: </span>
-                        {q.note}
-                      </div>
-                    )}
+                    </button>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleRecited(q.id);
+                      }}
+                      className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                        q.isRecited
+                          ? "bg-green-100 text-green-700 hover:bg-green-200"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      {q.isRecited ? (
+                        <>
+                          <svg
+                            className="w-3 h-3"
+                            fill="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          已背诵
+                        </>
+                      ) : (
+                        <>
+                          <svg
+                            className="w-3 h-3"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                            />
+                          </svg>
+                          标记背诵
+                        </>
+                      )}
+                    </button>
                   </div>
-                </div>
-              </Card>
+                </Card>
+              </div>
             ))}
           </div>
         ) : (
@@ -1060,18 +1505,26 @@ export function QuizView({ mode, category }: QuizViewProps) {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setOffset(Math.max(0, offset - limit))}
+                onClick={() => {
+                  const newOffset = Math.max(0, offset - limit);
+                  setOffset(newOffset);
+                  savePosition(newOffset, 0); // 切换页面时保存位置
+                }}
                 disabled={offset === 0}
               >
                 上一页
               </Button>
               <span className="text-sm font-medium">
-                第 {Math.floor(offset / limit) + 1} 页
+                {Math.floor(offset / limit) + 1}/{Math.ceil(totalCount / limit)}
               </span>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setOffset(offset + limit)}
+                onClick={() => {
+                  const newOffset = offset + limit;
+                  setOffset(newOffset);
+                  savePosition(newOffset, 0); // 切换页面时保存位置
+                }}
                 disabled={!hasMore}
               >
                 下一页

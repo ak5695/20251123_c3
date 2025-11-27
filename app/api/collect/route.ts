@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { questionId, isCollected } = body;
+  const { questionId, isCollected, isRecited } = body;
 
   const existingState = await db
     .select()
@@ -28,19 +28,31 @@ export async function POST(req: NextRequest) {
     )
     .limit(1);
 
+  // 准备更新的数据
+  const updateData: any = {
+    lastAnsweredAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  if (isCollected !== undefined) {
+    updateData.isCollected = isCollected;
+  }
+
+  if (isRecited !== undefined) {
+    updateData.isRecited = isRecited;
+  }
+
   if (existingState.length > 0) {
     await db
       .update(userQuestionState)
-      .set({
-        isCollected,
-        lastAnsweredAt: new Date(),
-      })
+      .set(updateData)
       .where(eq(userQuestionState.id, existingState[0].id));
   } else {
     await db.insert(userQuestionState).values({
       userId: session.user.id,
       questionId,
-      isCollected,
+      isCollected: isCollected || false,
+      isRecited: isRecited || false,
       wrongCount: 0,
       correctCount: 0,
       lastAnsweredAt: new Date(),
