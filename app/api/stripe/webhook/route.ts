@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { db } from "@/lib/db";
-import { user } from "@/lib/db/schema";
+import { user, subscriptions } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
@@ -46,6 +46,7 @@ export async function POST(req: Request) {
     const expiresAt = new Date();
     expiresAt.setMonth(expiresAt.getMonth() + 2);
 
+    // Update user status
     await db
       .update(user)
       .set({
@@ -54,6 +55,17 @@ export async function POST(req: Request) {
         stripeCustomerId: session.customer as string,
       })
       .where(eq(user.id, session.metadata.userId));
+
+    // Create subscription record
+    await db.insert(subscriptions).values({
+      userId: session.metadata.userId,
+      stripeSessionId: session.id,
+      stripePaymentIntentId: session.payment_intent as string,
+      amount: session.amount_total || 0,
+      currency: session.currency || "cny",
+      status: "completed",
+      expiresAt: expiresAt,
+    });
   }
 
   return new NextResponse(null, { status: 200 });
