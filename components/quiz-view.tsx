@@ -67,6 +67,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Progress } from "@/components/ui/progress";
+import { vibrate } from "@/lib/utils";
 
 interface Question {
   id: number;
@@ -1365,7 +1366,10 @@ export function QuizView({
           <Button
             className="w-full mb-2"
             variant="secondary"
-            onClick={() => setOffset((prev) => prev + limit)}
+            onClick={() => {
+              if (!checkSubscription()) return;
+              setOffset((prev) => prev + limit);
+            }}
           >
             下一批题目
           </Button>
@@ -1538,6 +1542,7 @@ export function QuizView({
                 <Card
                   className="p-2 cursor-pointer hover:shadow-md transition-all active:scale-[0.98] gap-0"
                   onClick={() => {
+                    vibrate();
                     // 标记正在导航到详情页，阻止handleScroll和cleanup保存错误的位置
                     isNavigatingToDetailRef.current = true;
 
@@ -1640,6 +1645,7 @@ export function QuizView({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
+                          vibrate();
                           toggleCollection(q.id);
                         }}
                         className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-all active:scale-95 ${
@@ -1682,6 +1688,7 @@ export function QuizView({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
+                          vibrate();
                           toggleRecited(q.id);
                         }}
                         className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-all active:scale-95 ${
@@ -1732,6 +1739,7 @@ export function QuizView({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
+                          vibrate();
                           handleDeleteNote(q.id);
                         }}
                         className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-all active:scale-95 bg-red-100 text-red-600 hover:bg-red-200"
@@ -1791,9 +1799,12 @@ export function QuizView({
                   <div
                     key={opt.label}
                     className={`flex items-center p-3 border rounded-lg cursor-pointer transition-all active:scale-[0.98] ${optionStyle}`}
-                    onClick={() =>
-                      !isReciteMode && handleOptionSelect(opt.label)
-                    }
+                    onClick={() => {
+                      if (!isReciteMode) {
+                        vibrate();
+                        handleOptionSelect(opt.label);
+                      }
+                    }}
                   >
                     <div
                       className={`w-6 h-6 rounded-full flex items-center justify-center mr-2 text-xs border ${
@@ -1931,6 +1942,7 @@ export function QuizView({
                             }`}
                             onClick={() => {
                               const newOffset = i * limit;
+                              if (newOffset > 0 && !checkSubscription()) return;
                               setOffset(newOffset);
                               savePosition(newOffset, 0, 0);
                               setIsPageSheetOpen(false);
