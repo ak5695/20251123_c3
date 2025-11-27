@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { questions, userQuestionState } from "@/lib/db/schema";
-import { eq, and, isNotNull } from "drizzle-orm";
+import { eq, and, isNotNull, desc } from "drizzle-orm";
 import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -34,7 +34,8 @@ export async function GET(req: NextRequest) {
         eq(userQuestionState.userId, session.user.id),
         isNotNull(userQuestionState.note)
       )
-    );
+    )
+    .orderBy(desc(userQuestionState.updatedAt));
 
   return NextResponse.json(notes);
 }

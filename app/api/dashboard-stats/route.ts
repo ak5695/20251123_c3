@@ -1,9 +1,11 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { questions, userQuestionState } from "@/lib/db/schema";
-import { eq, and, sql, isNull, or } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
+
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   const session = await auth.api.getSession({
@@ -15,14 +17,17 @@ export async function GET() {
   }
 
   try {
-    // Get total questions count
-    const [{ total }] = await db
-      .select({ total: sql<number>`count(*)` })
-      .from(questions);
-
-    // Get unanswered (not practiced) count
-    const [{ unanswered }] = await db
-      .select({ unanswered: sql<number>`count(*)` })
+    // Fetch stats grouped by category
+    const categoryStats = await db
+      .select({
+        category: questions.category,
+        total: sql<number>`count(*)::int`,
+        unanswered: sql<number>`count(*) filter (where ${userQuestionState.id} is null or (coalesce(${userQuestionState.correctCount}, 0) = 0 and coalesce(${userQuestionState.wrongCount}, 0) = 0))::int`,
+        correct: sql<number>`count(*) filter (where ${userQuestionState.correctCount} > 0 and coalesce(${userQuestionState.wrongCount}, 0) = 0)::int`,
+        incorrect: sql<number>`count(*) filter (where ${userQuestionState.wrongCount} > 0)::int`,
+        collected: sql<number>`count(*) filter (where ${userQuestionState.isCollected} = true)::int`,
+        viewed: sql<number>`count(*) filter (where ${userQuestionState.isRecited} = true)::int`,
+      })
       .from(questions)
       .leftJoin(
         userQuestionState,
@@ -31,58 +36,37 @@ export async function GET() {
           eq(userQuestionState.userId, session.user.id)
         )
       )
-      .where(
-        or(
-          isNull(userQuestionState.questionId),
-          and(
-            sql`COALESCE(${userQuestionState.correctCount}, 0) = 0`,
-            sql`COALESCE(${userQuestionState.wrongCount}, 0) = 0`
-          )
-        )
-      );
+      .groupBy(questions.category);
 
-    // Get wrong answers count (questions with wrong > 0)
-    const [{ wrongAnswers }] = await db
-      .select({ wrongAnswers: sql<number>`count(*)` })
-      .from(userQuestionState)
-      .where(
-        and(
-          eq(userQuestionState.userId, session.user.id),
-          sql`${userQuestionState.wrongCount} > 0`
-        )
-      );
+    // Calculate "All" stats
+    const allStats = categoryStats.reduce(
+      (acc, curr) => ({
+        category: "全部",
+        total: acc.total + curr.total,
+        unanswered: acc.unanswered + curr.unanswered,
+        correct: acc.correct + curr.correct,
+        incorrect: acc.incorrect + curr.incorrect,
+        collected: acc.collected + curr.collected,
+        viewed: acc.viewed + curr.viewed,
+      }),
+      {
+        category: "全部",
+        total: 0,
+        unanswered: 0,
+        correct: 0,
+        incorrect: 0,
+        collected: 0,
+        viewed: 0,
+      }
+    );
 
-    // Get collected count
-    const [{ collected }] = await db
-      .select({ collected: sql<number>`count(*)` })
-      .from(userQuestionState)
-      .where(
-        and(
-          eq(userQuestionState.userId, session.user.id),
-          eq(userQuestionState.isCollected, true)
-        )
-      );
+    // Add "unviewed" to each
+    const formattedStats = [allStats, ...categoryStats].map((stat) => ({
+      ...stat,
+      unviewed: stat.total - stat.viewed,
+    }));
 
-    // Calculate unmemorized count (total - questions with correctCount > 0)
-    const [{ memorizedCount }] = await db
-      .select({ memorizedCount: sql<number>`count(*)` })
-      .from(userQuestionState)
-      .where(
-        and(
-          eq(userQuestionState.userId, session.user.id),
-          sql`${userQuestionState.correctCount} > 0`
-        )
-      );
-
-    const unmemorized = total - memorizedCount;
-
-    return NextResponse.json({
-      total: 2965,
-      unanswered,
-      wrongAnswers,
-      collected,
-      unmemorized,
-    });
+    return NextResponse.json(formattedStats);
   } catch (error) {
     console.error("Error fetching dashboard stats:", error);
     return NextResponse.json(

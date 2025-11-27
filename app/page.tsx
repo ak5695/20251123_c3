@@ -2,28 +2,52 @@
 
 import { authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
+import { useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
-  BookOpen,
-  FileText,
-  History,
-  MessageSquare,
-  PenTool,
+  CheckCircle,
+  XCircle,
   Star,
-  AlertTriangle,
-  BarChart,
+  Eye,
+  EyeOff,
+  HelpCircle,
   LogOut,
+  Loader2,
+  FileText,
+  BarChart,
+  PenTool,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import Image from "next/image";
+import { useQuery } from "@tanstack/react-query";
+
+interface CategoryStats {
+  category: string;
+  total: number;
+  unanswered: number;
+  correct: number;
+  incorrect: number;
+  collected: number;
+  viewed: number;
+  unviewed: number;
+}
 
 export default function Dashboard() {
   const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
 
-  const [stats, setStats] = useState<
-    { category: string; total: number; answered: number }[]
-  >([]);
+  const { data: stats = [], isLoading: isStatsLoading } = useQuery<
+    CategoryStats[]
+  >({
+    queryKey: ["dashboard-stats"],
+    queryFn: async () => {
+      const res = await fetch("/api/dashboard-stats");
+      if (!res.ok) throw new Error("Failed to fetch stats");
+      return res.json();
+    },
+    enabled: !!session,
+  });
 
   useEffect(() => {
     if (!isPending && !session) {
@@ -31,40 +55,69 @@ export default function Dashboard() {
     }
   }, [session, isPending, router]);
 
-  useEffect(() => {
-    if (session) {
-      fetch("/api/stats")
-        .then((res) => res.json())
-        .then((data) => setStats(data))
-        .catch(console.error);
-    }
-  }, [session]);
-
   const handleSignOut = async () => {
     await authClient.signOut();
     router.push("/sign-in");
   };
 
-  if (isPending)
+  const navigateToQuiz = (category: string, filterType: string) => {
+    const params = new URLSearchParams();
+    if (category !== "全部") {
+      params.set("category", category);
+    }
+    params.set("filterType", filterType);
+    router.push(`/quiz/category?${params.toString()}`);
+  };
+
+  if (isPending || (session && isStatsLoading)) {
     return (
-      <div className="flex h-screen items-center justify-center">加载中...</div>
+      <div className="flex h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
     );
+  }
+
   if (!session) return null;
 
-  const mainActions = [
+  const allStats = stats.find((s) => s.category === "全部");
+  const categoryStats = stats.filter((s) => s.category !== "全部");
+
+  const StatButton = ({
+    label,
+    value,
+    color,
+    bgColor,
+    onClick,
+  }: {
+    label: string;
+    value: number;
+    color: string;
+    bgColor: string;
+    onClick: () => void;
+  }) => (
+    <button
+      onClick={onClick}
+      className={`flex flex-col items-center justify-center p-1 rounded hover:bg-gray-50 transition-colors w-full ${bgColor} bg-opacity-20`}
+    >
+      <span className={`text-sm font-bold ${color}`}>{value}</span>
+      <span className="text-[10px] text-gray-500">{label}</span>
+    </button>
+  );
+
+  const topActions = [
     {
-      label: "做题记录",
-      icon: History,
-      color: "text-orange-500",
-      bg: "bg-orange-100",
-      href: "/records",
+      label: "模拟试卷",
+      icon: FileText,
+      color: "text-blue-500",
+      bg: "bg-blue-100",
+      href: "/quiz/mock",
     },
     {
-      label: "错题强化",
-      icon: AlertTriangle,
-      color: "text-red-500",
-      bg: "bg-red-100",
-      href: "/quiz/mistakes",
+      label: "模拟成绩",
+      icon: BarChart,
+      color: "text-purple-500",
+      bg: "bg-purple-100",
+      href: "/mock-scores",
     },
     {
       label: "我的笔记",
@@ -73,137 +126,215 @@ export default function Dashboard() {
       bg: "bg-orange-100",
       href: "/notes",
     },
-    {
-      label: "模拟成绩",
-      icon: BarChart,
-      color: "text-blue-500",
-      bg: "bg-blue-100",
-      href: "/mock-scores",
-    },
-  ];
-
-  const modes = [
-    { label: "模拟试卷", icon: FileText, href: "/quiz/mock" },
-    { label: "试题收藏", icon: Star, href: "/quiz/collection" },
-  ];
-
-  const categories = [
-    { label: "法律法规", color: "text-blue-500", bg: "bg-blue-50" },
-    { label: "安全管理", color: "text-green-500", bg: "bg-green-50" },
-    { label: "土建综合安全技术", color: "text-purple-500", bg: "bg-purple-50" },
-    { label: "机械设备安全技术", color: "text-orange-500", bg: "bg-orange-50" },
   ];
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-      <header className="bg-white p-4 shadow-sm sticky top-0 z-10 flex justify-between items-center">
-        <h1 className="text-lg font-bold">C3安考宝典</h1>
-        <Button variant="ghost" size="icon" onClick={handleSignOut}>
-          <LogOut className="w-5 h-5 text-gray-500" />
-        </Button>
+      <header className="bg-white p-3 shadow-sm sticky top-0 z-10 flex justify-between items-center">
+        <div className="flex items-center gap-2">
+          <Image
+            src="/logo.jpg" // 确保路径正确，public目录下的文件需要以/开头
+            alt="网站logo" // 添加alt属性提高可访问性
+            width={40} // size-5对应20px
+            height={40} // size-5对应20px
+            className="size-10 object-contain" // 添加object-contain确保图片正确显示
+            priority={false} // 非关键图片设置为false
+          />
+          <h1 className="text-lg font-bold">广东C3安考宝典</h1>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-600">
+            {session.user.name || session.user.email}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleSignOut}
+            className="text-gray-500 h-8 w-8"
+          >
+            <LogOut className="w-4 h-4" />
+          </Button>
+        </div>
       </header>
 
-      <main className="p-4 space-y-6">
-        {/* Main Actions */}
-        <div className="bg-white rounded-xl p-4 shadow-sm">
-          <h2 className="text-sm font-medium text-gray-500 mb-4">做题报告</h2>
-          <div className="grid grid-cols-4 gap-2">
-            {mainActions.map((action) => (
-              <div
-                key={action.label}
-                className="flex flex-col items-center gap-2 cursor-pointer"
-                onClick={() => router.push(action.href)}
-              >
-                <div className={`p-3 rounded-xl ${action.bg}`}>
-                  <action.icon className={`w-6 h-6 ${action.color}`} />
+      <main className="p-2 space-y-2 max-w-md mx-auto">
+        {/* Top Actions */}
+        <div className="grid grid-cols-3 gap-2 mb-2">
+          {topActions.map((action) => (
+            <Card
+              key={action.label}
+              className="cursor-pointer hover:shadow-md transition-shadow border-none shadow-sm py-2"
+              onClick={() => router.push(action.href)}
+            >
+              <CardContent className="flex flex-col items-center justify-center p-0 gap-2">
+                <div className={`p-2 rounded-full ${action.bg}`}>
+                  <action.icon className={`w-5 h-5 ${action.color}`} />
                 </div>
-                <span className="text-xs text-gray-600">{action.label}</span>
+                <span className="text-xs font-medium text-gray-700">
+                  {action.label}
+                </span>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Total Stats Card */}
+        {allStats && (
+          <Card className="border-none shadow-sm overflow-hidden gap-y-0 p-1 rounded-sm">
+            <CardHeader className=" py-0 px-3">
+              <CardTitle className="flex justify-between items-center text-sm">
+                <span>总题库</span>
+                <span className="text-xs text-gray-400 font-normal">
+                  共 {allStats.total} 题
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="grid grid-cols-6 gap-1">
+                <StatButton
+                  label="未做"
+                  value={allStats.unanswered}
+                  color="text-gray-600"
+                  bgColor="bg-gray-100"
+                  onClick={() => navigateToQuiz("全部", "unanswered")}
+                />
+                <StatButton
+                  label="做对"
+                  value={allStats.correct}
+                  color="text-green-600"
+                  bgColor="bg-green-100"
+                  onClick={() => navigateToQuiz("全部", "correct")}
+                />
+                <StatButton
+                  label="做错"
+                  value={allStats.incorrect}
+                  color="text-red-600"
+                  bgColor="bg-red-100"
+                  onClick={() => navigateToQuiz("全部", "incorrect")}
+                />
+                <StatButton
+                  label="收藏"
+                  value={allStats.collected}
+                  color="text-yellow-600"
+                  bgColor="bg-yellow-100"
+                  onClick={() => navigateToQuiz("全部", "collected")}
+                />
+                <StatButton
+                  label="已浏览"
+                  value={allStats.viewed}
+                  color="text-blue-600"
+                  bgColor="bg-blue-100"
+                  onClick={() => navigateToQuiz("全部", "viewed")}
+                />
+                <StatButton
+                  label="未浏览"
+                  value={allStats.unviewed}
+                  color="text-purple-600"
+                  bgColor="bg-purple-100"
+                  onClick={() => navigateToQuiz("全部", "unviewed")}
+                />
               </div>
-            ))}
-          </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Category Stats Cards */}
+        <div className="space-y-1">
+          {categoryStats.map((stat) => (
+            <Card
+              key={stat.category}
+              className="border-none shadow-sm gap-y-0 p-1 rounded-sm"
+            >
+              <CardHeader className="pb-0 px-3 border-b border-gray-50">
+                <CardTitle className="flex justify-between items-center text-sm  ">
+                  <span>{stat.category}</span>
+                  <span className="text-xs text-gray-400 font-normal">
+                    共 {stat.total} 题
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="grid grid-cols-6 gap-1">
+                  <StatButton
+                    label="未做"
+                    value={stat.unanswered}
+                    color="text-gray-600"
+                    bgColor="bg-gray-100"
+                    onClick={() => navigateToQuiz(stat.category, "unanswered")}
+                  />
+                  <StatButton
+                    label="做对"
+                    value={stat.correct}
+                    color="text-green-600"
+                    bgColor="bg-green-100"
+                    onClick={() => navigateToQuiz(stat.category, "correct")}
+                  />
+                  <StatButton
+                    label="做错"
+                    value={stat.incorrect}
+                    color="text-red-600"
+                    bgColor="bg-red-100"
+                    onClick={() => navigateToQuiz(stat.category, "incorrect")}
+                  />
+                  <StatButton
+                    label="收藏"
+                    value={stat.collected}
+                    color="text-yellow-600"
+                    bgColor="bg-yellow-100"
+                    onClick={() => navigateToQuiz(stat.category, "collected")}
+                  />
+                  <StatButton
+                    label="已浏览"
+                    value={stat.viewed}
+                    color="text-blue-600"
+                    bgColor="bg-blue-100"
+                    onClick={() => navigateToQuiz(stat.category, "viewed")}
+                  />
+                  <StatButton
+                    label="未浏览"
+                    value={stat.unviewed}
+                    color="text-purple-600"
+                    bgColor="bg-purple-100"
+                    onClick={() => navigateToQuiz(stat.category, "unviewed")}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
 
-        {/* Categories */}
-        <div className="space-y-4">
-          <h2 className="text-sm font-medium text-gray-500">专项练习</h2>
-          <div className="grid grid-cols-2 gap-3">
-            {categories.map((category) => {
-              const stat = stats.find((s) => s.category === category.label);
-              return (
-                <Card
-                  key={category.label}
-                  className="cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() =>
-                    router.push(
-                      `/quiz/category?category=${encodeURIComponent(
-                        category.label
-                      )}`
-                    )
-                  }
-                >
-                  <CardContent className="flex flex-col p-4 gap-2">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-lg ${category.bg} shrink-0`}>
-                        <BookOpen className={`w-5 h-5 ${category.color}`} />
-                      </div>
-                      <span className="font-medium text-sm">
-                        {category.label}
-                      </span>
-                    </div>
-                    <div className="text-xs text-gray-400 pl-1">
-                      {stat ? `${stat.answered}/${stat.total}` : "加载中..."}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+        <footer className="mt-12 py-8 text-center text-xs text-muted-foreground/60 border-t">
+          <div className="flex justify-center gap-4 mb-4">
+            <a
+              href="/refund"
+              className="hover:text-foreground transition-colors"
+            >
+              退款政策
+            </a>
+            <span className="text-border">|</span>
+            <a
+              href="/contact"
+              className="hover:text-foreground transition-colors"
+            >
+              联系方式
+            </a>
+            <span className="text-border">|</span>
+            <a
+              href="/privacy"
+              className="hover:text-foreground transition-colors"
+            >
+              隐私政策
+            </a>
           </div>
-        </div>
-
-        {/* Other Modes */}
-        <div className="space-y-4">
-          <h2 className="text-sm font-medium text-gray-500">常用功能</h2>
-          <div className="grid grid-cols-2 gap-3">
-            {modes.map((mode) => (
-              <Card
-                key={mode.label}
-                className="cursor-pointer hover:shadow-md transition-shadow"
-                onClick={() => router.push(mode.href)}
-              >
-                <CardContent className="flex items-center p-4 gap-3">
-                  <div className="p-2 bg-gray-50 rounded-lg shrink-0">
-                    <mode.icon className="w-5 h-5 text-gray-500" />
-                  </div>
-                  <span className="font-medium text-sm">{mode.label}</span>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="space-y-2 px-4 leading-relaxed max-w-3xl mx-auto">
+            <p>
+              题库来源：
+              广东省住房和城乡建设厅官方网站2025年8月8日公开发布的《广东省建筑施工企业综合类专职安全生产管理人员（C3类）安全生产考核第六批题库及参考答案》(2965道)
+            </p>
           </div>
-        </div>
+        </footer>
       </main>
-
-      <footer className="bg-white border-t p-4 text-center">
-        <div className="flex justify-center space-x-4 text-xs text-gray-500">
-          <a href="/terms" className="hover:text-blue-500">
-            服务条款
-          </a>
-          <span>|</span>
-          <a href="/privacy" className="hover:text-blue-500">
-            隐私政策
-          </a>
-          <span>|</span>
-          <a href="/refund" className="hover:text-blue-500">
-            退款政策
-          </a>
-          <span>|</span>
-          <a href="/support" className="hover:text-blue-500">
-            客服支持
-          </a>
-        </div>
-        <p className="text-xs text-gray-400 mt-2">
-          © 2024 C3安考宝典. All rights reserved.
-        </p>
-      </footer>
     </div>
   );
 }

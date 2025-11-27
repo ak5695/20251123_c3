@@ -47,7 +47,7 @@ export default function CategoryPage() {
       filter: "collection",
     },
     {
-      label: "未背诵",
+      label: "未浏览",
       value: stats.unmemorized,
       icon: Layers,
       color: "text-purple-500",

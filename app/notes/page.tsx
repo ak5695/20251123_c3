@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, Trash2 } from "lucide-react";
+import { ChevronLeft, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface Note {
@@ -24,6 +24,7 @@ export default function NotesPage() {
   const router = useRouter();
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
     fetchNotes();
@@ -43,7 +44,11 @@ export default function NotesPage() {
     }
   };
 
-  const handleDeleteNote = async (id: number) => {
+  const handleDeleteNote = async (e: React.MouseEvent, id: number) => {
+    e.stopPropagation(); // Prevent card click
+    if (deletingId) return;
+
+    setDeletingId(id);
     try {
       await fetch("/api/note", {
         method: "POST",
@@ -56,6 +61,8 @@ export default function NotesPage() {
       toast.success("笔记已删除");
     } catch (error) {
       toast.error("删除失败");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -82,8 +89,14 @@ export default function NotesPage() {
             暂无笔记，快去练习中添加吧
           </div>
         ) : (
-          notes.map((item) => (
-            <Card key={item.id} className="overflow-hidden">
+          notes.map((item, index) => (
+            <Card
+              key={item.id}
+              className={`overflow-hidden cursor-pointer transition-all hover:shadow-md ${
+                deletingId === item.id ? "opacity-50 pointer-events-none" : ""
+              }`}
+              onClick={() => router.push(`/quiz/notes?offset=${index}`)}
+            >
               <CardHeader className="bg-gray-50 p-4 border-b">
                 <div className="flex justify-between items-start gap-4">
                   <div className="space-y-1">
@@ -107,9 +120,14 @@ export default function NotesPage() {
                     variant="ghost"
                     size="icon"
                     className="text-gray-400 hover:text-red-500 shrink-0"
-                    onClick={() => handleDeleteNote(item.id)}
+                    onClick={(e) => handleDeleteNote(e, item.id)}
+                    disabled={deletingId === item.id}
                   >
-                    <Trash2 className="w-4 h-4" />
+                    {deletingId === item.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
                   </Button>
                 </div>
               </CardHeader>

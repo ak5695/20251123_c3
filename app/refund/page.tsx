@@ -24,7 +24,7 @@ export default function RefundPolicyPage() {
           <CardHeader>
             <CardTitle>C3安考宝典退款政策</CardTitle>
             <p className="text-sm text-gray-600">
-              最后更新时间：2024年11月26日
+              最后更新时间：2025年11月26日
             </p>
           </CardHeader>
           <CardContent className="space-y-6">

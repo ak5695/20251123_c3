@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { Toaster } from "sonner";
+import { Providers } from "@/components/providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "C3安考宝典",
-  description: "C3安考宝典",
+  title: "广东C3安考宝典",
+  description: "广东C3安考宝典",
   icons: {
     icon: "/logo.jpg",
     shortcut: "/logo.jpg",
@@ -20,8 +21,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`antialiased`}>
-        {children}
-        <Toaster />
+        <Providers>
+          {children}
+          <Toaster />
+        </Providers>
       </body>
     </html>
   );

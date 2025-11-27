@@ -1,6 +1,11 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import {
+  useQuery,
+  keepPreviousData,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -23,6 +28,7 @@ import {
   Star,
   Pause,
   Play,
+  Bookmark,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -39,6 +45,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -57,6 +64,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Progress } from "@/components/ui/progress";
 
 interface Question {
   id: number;
@@ -80,30 +88,65 @@ interface Question {
 interface QuizViewProps {
   mode: string;
   category?: string;
+  filterType?: string;
+  isPaid?: boolean;
 }
 
-export function QuizView({ mode, category }: QuizViewProps) {
+const getFilterLabel = (filter?: string) => {
+  switch (filter) {
+    case "unanswered":
+      return "未做";
+    case "correct":
+      return "做对";
+    case "incorrect":
+      return "做错";
+    case "collected":
+      return "收藏";
+    case "viewed":
+      return "已浏览";
+    case "unviewed":
+      return "未浏览";
+    default:
+      return "";
+  }
+};
+
+export function QuizView({
+  mode,
+  category,
+  filterType,
+  isPaid = false,
+}: QuizViewProps) {
+  const queryClient = useQueryClient();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [progress, setProgress] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<string[]>([]);
-  const [showAnswer, setShowAnswer] = useState(false);
+  const [showAnswer, setShowAnswer] = useState(mode === "notes");
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [isPageSheetOpen, setIsPageSheetOpen] = useState(false);
+  const [showSubscriptionDialog, setShowSubscriptionDialog] = useState(false);
+  const [isCheckingSubscription, setIsCheckingSubscription] = useState(false);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [viewMode, setViewMode] = useState<"card" | "list">(
-    mode === "category" ? "list" : "card"
+    mode === "category" || filterType ? "list" : "card"
   );
   const [detailIndex, setDetailIndex] = useState<number | null>(null);
-  const [showAllAnswers, setShowAllAnswers] = useState(mode === "category");
+  const [showAllAnswers, setShowAllAnswers] = useState(
+    mode === "category" || !!filterType
+  );
   const [totalCount, setTotalCount] = useState(0);
   const limit = 50;
 
   // 位置记录相关 - 重新设计
   const getPositionKey = () => {
-    return `quiz-position-${mode}-${category || "all"}`;
+    return `quiz-position-${mode}-${category || "all"}-${filterType || "all"}`;
   };
+
+  const scrollContainerRef = useRef<HTMLElement | null>(null);
 
   // 保存位置：同时保存页码、题目索引和滚动位置
   const savePosition = (
@@ -111,14 +154,21 @@ export function QuizView({ mode, category }: QuizViewProps) {
     questionIndex: number = 0,
     scrollTop?: number
   ) => {
+    const currentScrollTop =
+      scrollTop !== undefined
+        ? scrollTop
+        : scrollContainerRef.current?.scrollTop || 0;
+
+    // 防御性检查：如果题目索引大于0但滚动位置为0，说明可能处于异常状态（如组件卸载中），不保存
+    if (questionIndex > 0 && currentScrollTop === 0) {
+      console.log("忽略异常位置保存: index > 0 但 scrollTop = 0");
+      return;
+    }
+
     const positionData = {
       offset: pageOffset,
       questionIndex,
-      scrollTop:
-        scrollTop ||
-        document.documentElement.scrollTop ||
-        document.body.scrollTop ||
-        0,
+      scrollTop: currentScrollTop,
       timestamp: Date.now(),
     };
     localStorage.setItem(getPositionKey(), JSON.stringify(positionData));
@@ -141,99 +191,176 @@ export function QuizView({ mode, category }: QuizViewProps) {
 
   // 恢复位置函数
   const restorePosition = (positionData: any) => {
-    if (!positionData) return;
+    if (!positionData) return false;
+
+    // 如果是初始位置(0,0)，直接滚动到顶部并返回成功
+    if (positionData.questionIndex === 0 && positionData.scrollTop === 0) {
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTo({ top: 0 });
+        return true;
+      }
+      return false;
+    }
 
     console.log("尝试恢复位置:", positionData);
 
-    // 方法1: 尝试滚动到具体题目
-    if (positionData.questionIndex < questions.length) {
+    // 方法1: 优先使用保存的滚动位置 (更精确，避免漂移)
+    if (positionData.scrollTop >= 0 && scrollContainerRef.current) {
+      console.log("使用滚动位置恢复");
+      scrollContainerRef.current.scrollTo({
+        top: positionData.scrollTop,
+        behavior: "auto",
+      });
+      return true;
+    }
+
+    // 方法2: 尝试滚动到具体题目 (降级方案)
+    // 只有当索引大于0时才优先使用scrollIntoView，否则如果是0，可能只是页面顶部
+    if (
+      positionData.questionIndex > 0 &&
+      positionData.questionIndex < questions.length
+    ) {
       const targetElement = questionRefs.current[positionData.questionIndex];
       if (targetElement) {
         console.log("使用题目元素滚动");
-        setTimeout(() => {
-          targetElement.scrollIntoView({
-            behavior: "auto", // 使用瞬时滚动，避免动画干扰
-            block: "start",
-          });
-        }, 200);
-        return;
+        targetElement.scrollIntoView({
+          behavior: "auto", // 使用瞬时滚动，避免动画干扰
+          block: "start",
+        });
+        // 稍微修正一下位置，避免被header遮挡
+        // 注意：如果是容器内滚动，window.scrollBy无效，需要滚动容器
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollBy(0, -60);
+        }
+        return true;
       }
     }
 
-    // 方法2: 使用保存的滚动位置
-    if (positionData.scrollTop > 0) {
-      console.log("使用滚动位置恢复");
-      setTimeout(() => {
-        window.scrollTo({
-          top: positionData.scrollTop,
-          behavior: "auto",
-        });
-      }, 300);
-    }
+    return false;
   };
   const skipFetchRef = useRef(false);
   const navigationRef = useRef<"start" | "end" | null>(null);
   const questionRefs = useRef<(HTMLDivElement | null)[]>([]);
   const shouldScrollToPosition = useRef(false);
   const [visibleQuestionIndex, setVisibleQuestionIndex] = useState(0);
+  const visibleQuestionIndexRef = useRef(0);
   const lastSavedPositionRef = useRef<any>(null);
+  const lastLoadedKeyRef = useRef<string>("");
+  const isNavigatingToDetailRef = useRef(false);
+  const lastFirstQuestionIdRef = useRef<number | null>(null);
+
+  // 当回到列表模式时，重置导航标记
+  useEffect(() => {
+    if (viewMode === "list" && detailIndex === null) {
+      isNavigatingToDetailRef.current = false;
+    }
+  }, [viewMode, detailIndex]);
 
   // 页面离开时保存位置 + 滚动事件监听
   useEffect(() => {
+    const container = scrollContainerRef.current;
+
     const handleBeforeUnload = () => {
-      if (viewMode === "list") {
-        const currentScrollTop =
-          document.documentElement.scrollTop || document.body.scrollTop;
-        savePosition(offset, visibleQuestionIndex, currentScrollTop);
+      if (
+        viewMode === "list" &&
+        detailIndex === null &&
+        !isNavigatingToDetailRef.current
+      ) {
+        const currentScrollTop = container?.scrollTop || 0;
+        savePosition(offset, visibleQuestionIndexRef.current, currentScrollTop);
       }
     };
 
     const handleVisibilityChange = () => {
-      if (document.hidden && viewMode === "list") {
-        const currentScrollTop =
-          document.documentElement.scrollTop || document.body.scrollTop;
-        savePosition(offset, visibleQuestionIndex, currentScrollTop);
+      if (
+        document.hidden &&
+        viewMode === "list" &&
+        detailIndex === null &&
+        !isNavigatingToDetailRef.current
+      ) {
+        const currentScrollTop = container?.scrollTop || 0;
+        savePosition(offset, visibleQuestionIndexRef.current, currentScrollTop);
       }
     };
 
     // 滚动事件监听 - 定期保存位置
     let scrollTimeout: NodeJS.Timeout;
     const handleScroll = () => {
-      if (viewMode === "list") {
+      if (
+        viewMode === "list" &&
+        detailIndex === null &&
+        !isNavigatingToDetailRef.current &&
+        !shouldScrollToPosition.current
+      ) {
         clearTimeout(scrollTimeout);
         scrollTimeout = setTimeout(() => {
-          const currentScrollTop =
-            document.documentElement.scrollTop || document.body.scrollTop;
-          // 计算当前可见的大致题目索引
-          const estimatedIndex = Math.floor(currentScrollTop / 150); // 假设每题150px高度
-          const actualIndex = Math.min(estimatedIndex, questions.length - 1);
-          savePosition(offset, Math.max(0, actualIndex), currentScrollTop);
-          console.log("滚动保存位置:", {
-            offset,
-            actualIndex,
-            currentScrollTop,
-          });
-        }, 1000); // 1秒后保存，防止频繁保存
+          const currentScrollTop = container?.scrollTop || 0;
+
+          // 主动计算当前可见的题目索引，作为双重保障
+          let activeIndex = visibleQuestionIndexRef.current;
+          const headerOffset = 200; // 头部偏移量，调大一点以避免选中已经滚出一半的题目
+
+          // 只有当IntersectionObserver没有更新或者我们需要更精确的滚动停止位置时才计算
+          // 这里我们总是计算一次以确保准确性
+          for (let i = 0; i < questionRefs.current.length; i++) {
+            const el = questionRefs.current[i];
+            if (!el) continue;
+            const rect = el.getBoundingClientRect();
+            // 找到第一个底部在头部下方的元素（即当前最上方可见的元素）
+            if (rect.bottom > headerOffset) {
+              activeIndex = i;
+              break;
+            }
+          }
+
+          if (activeIndex !== visibleQuestionIndexRef.current) {
+            visibleQuestionIndexRef.current = activeIndex;
+            setVisibleQuestionIndex(activeIndex);
+          }
+
+          savePosition(offset, activeIndex, currentScrollTop);
+        }, 300);
       }
     };
 
     window.addEventListener("beforeunload", handleBeforeUnload);
     window.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("scroll", handleScroll, { passive: true });
+
+    // 监听容器的滚动事件，而不是window
+    if (container) {
+      container.addEventListener("scroll", handleScroll, { passive: true });
+    }
 
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
       window.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("scroll", handleScroll);
+      if (container) {
+        container.removeEventListener("scroll", handleScroll);
+      }
       clearTimeout(scrollTimeout);
-      // 组件卸载时保存位置
-      if (viewMode === "list") {
-        const currentScrollTop =
-          document.documentElement.scrollTop || document.body.scrollTop;
-        savePosition(offset, visibleQuestionIndex, currentScrollTop);
+      // 组件卸载时保存位置，但只有在题目已加载的情况下才保存
+      // 防止初始加载或offset切换时的空状态覆盖了正确的保存位置
+      // 同时也防止进入详情页时保存错误位置
+      if (
+        viewMode === "list" &&
+        detailIndex === null &&
+        questions.length > 0 &&
+        !isNavigatingToDetailRef.current &&
+        scrollContainerRef.current
+      ) {
+        const currentScrollTop = scrollContainerRef.current.scrollTop;
+        savePosition(offset, visibleQuestionIndexRef.current, currentScrollTop);
       }
     };
-  }, [viewMode, offset, visibleQuestionIndex, questions.length]);
+  }, [
+    viewMode,
+    offset,
+    questions.length,
+    detailIndex,
+    mode,
+    category,
+    filterType,
+  ]);
 
   const [isConfiguring, setIsConfiguring] = useState(false);
   const [quizConfig, setQuizConfig] = useState({
@@ -286,48 +413,110 @@ export function QuizView({ mode, category }: QuizViewProps) {
 
   // 状态管理函数
   const toggleCollection = async (questionId: number) => {
-    try {
-      const currentQuestion = questions.find((q) => q.id === questionId);
-      const newIsCollected = !currentQuestion?.isCollected;
+    const currentQuestion = questions.find((q) => q.id === questionId);
+    if (!currentQuestion) return;
 
+    const newIsCollected = !currentQuestion.isCollected;
+
+    // Optimistic update query cache
+    const queryKey = [
+      "questions",
+      mode,
+      category,
+      filterType,
+      offset,
+      quizParams,
+      viewMode === "card" && mode === "category" ? "card-practiced" : "normal",
+    ];
+
+    queryClient.setQueryData(queryKey, (oldData: any) => {
+      if (!oldData) return oldData;
+      return {
+        ...oldData,
+        data: oldData.data.map((q: Question) =>
+          q.id === questionId ? { ...q, isCollected: newIsCollected } : q
+        ),
+      };
+    });
+
+    try {
       const response = await fetch("/api/collect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ questionId, isCollected: newIsCollected }),
       });
 
-      if (response.ok) {
-        setQuestions((prev) =>
-          prev.map((q) =>
-            q.id === questionId ? { ...q, isCollected: newIsCollected } : q
-          )
-        );
+      if (!response.ok) {
+        throw new Error("Failed to update collection");
       }
+      // toast.success(newIsCollected ? "已收藏" : "已取消收藏");
     } catch (error) {
       console.error("Toggle collection error:", error);
+      toast.error("操作失败");
+      // Revert query cache
+      queryClient.setQueryData(queryKey, (oldData: any) => {
+        if (!oldData) return oldData;
+        return {
+          ...oldData,
+          data: oldData.data.map((q: Question) =>
+            q.id === questionId ? { ...q, isCollected: !newIsCollected } : q
+          ),
+        };
+      });
     }
   };
 
   const toggleRecited = async (questionId: number) => {
-    try {
-      const currentQuestion = questions.find((q) => q.id === questionId);
-      const newIsRecited = !currentQuestion?.isRecited;
+    const currentQuestion = questions.find((q) => q.id === questionId);
+    if (!currentQuestion) return;
 
+    const newIsRecited = !currentQuestion.isRecited;
+
+    // Optimistic update query cache
+    const queryKey = [
+      "questions",
+      mode,
+      category,
+      filterType,
+      offset,
+      quizParams,
+      viewMode === "card" && mode === "category" ? "card-practiced" : "normal",
+    ];
+
+    queryClient.setQueryData(queryKey, (oldData: any) => {
+      if (!oldData) return oldData;
+      return {
+        ...oldData,
+        data: oldData.data.map((q: Question) =>
+          q.id === questionId ? { ...q, isRecited: newIsRecited } : q
+        ),
+      };
+    });
+
+    try {
       const response = await fetch("/api/collect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ questionId, isRecited: newIsRecited }),
       });
 
-      if (response.ok) {
-        setQuestions((prev) =>
-          prev.map((q) =>
-            q.id === questionId ? { ...q, isRecited: newIsRecited } : q
-          )
-        );
+      if (!response.ok) {
+        throw new Error("Failed to update recited status");
       }
+      // toast.success(newIsRecited ? "已标记背诵" : "已取消背诵");
     } catch (error) {
       console.error("Toggle recited error:", error);
+      toast.error("操作失败");
+      // Revert query cache
+      queryClient.setQueryData(queryKey, (oldData: any) => {
+        if (!oldData) return oldData;
+        return {
+          ...oldData,
+          data: oldData.data.map((q: Question) =>
+            q.id === questionId ? { ...q, isRecited: !newIsRecited } : q
+          ),
+        };
+      });
     }
   };
 
@@ -344,6 +533,7 @@ export function QuizView({ mode, category }: QuizViewProps) {
               ...q,
               status: isCorrect ? "correct" : "incorrect",
               lastAnswered: userAnswer,
+              isPracticed: true,
             }
           : q
       )
@@ -529,77 +719,141 @@ export function QuizView({ mode, category }: QuizViewProps) {
     }
   };
 
-  useEffect(() => {
-    async function fetchQuestions() {
-      if (skipFetchRef.current) {
-        skipFetchRef.current = false;
-        return;
+  const {
+    data: queryData,
+    isLoading: isQueryLoading,
+    isFetching,
+  } = useQuery({
+    queryKey: [
+      "questions",
+      mode,
+      category,
+      filterType,
+      offset,
+      quizParams,
+      viewMode === "card" && mode === "category" ? "card-practiced" : "normal",
+    ],
+    queryFn: async () => {
+      let url = `/api/questions?mode=${mode}&offset=${offset}`;
+
+      if (quizParams) {
+        url += `&limit=${quizParams.limit}`;
+        if (quizParams.random) url += `&random=true`;
+      } else {
+        url += `&limit=${limit}`;
       }
 
-      if (mode === "mock" && isCheckingResume) return;
+      if (category) {
+        url += `&category=${encodeURIComponent(category)}`;
+      }
 
-      try {
-        setLoading(true);
-        let url = `/api/questions?mode=${mode}&offset=${offset}`;
+      if (filterType) {
+        url += `&filterType=${filterType}`;
+      }
 
-        if (quizParams) {
-          url += `&limit=${quizParams.limit}`;
-          if (quizParams.random) url += `&random=true`;
-        } else {
-          url += `&limit=${limit}`;
-        }
+      // 答题模式下（card view），默认过滤掉已做过的题目
+      if (mode === "category" && viewMode === "card" && !filterType) {
+        url += `&filterPracticed=true`;
+      }
+      const res = await fetch(url);
+      return res.json();
+    },
+    enabled: !(mode === "mock" && isCheckingResume) && !skipFetchRef.current,
+    placeholderData: keepPreviousData,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
 
-        if (category) {
-          url += `&category=${encodeURIComponent(category)}`;
-        }
-        if (mode === "category" && viewMode === "card" && !quizParams) {
-          url += `&filterPracticed=true`;
-        }
-        const res = await fetch(url);
-        const { data, total } = await res.json();
-        if (data.length < limit) {
-          setHasMore(false);
-        }
-        setQuestions(data);
-        setTotalCount(total);
+  useEffect(() => {
+    if (queryData) {
+      const { data, total } = queryData;
+      if (data.length < limit) {
+        setHasMore(false);
+      } else {
+        setHasMore(true);
+      }
 
-        if (navigationRef.current === "end") {
-          const newIndex = data.length - 1;
-          setCurrentIndex(newIndex);
-          if (viewMode === "list") setDetailIndex(newIndex);
-        } else {
-          setCurrentIndex(0);
-          if (viewMode === "list" && detailIndex !== null) setDetailIndex(0);
-        }
-        navigationRef.current = null;
+      // Only update questions if we are not in a state where we should preserve local changes
+      // But since we sync local changes to server immediately (collect, note), it might be fine.
+      // However, for 'status' (correct/incorrect) which is local-first in some modes?
+      // Actually, the previous code overwrote questions on every fetch.
 
+      // Check if it's the same batch of questions (to prevent resetting index on optimistic updates)
+      const currentFirstId = data.length > 0 ? data[0].id : null;
+      const isSameBatch = lastFirstQuestionIdRef.current === currentFirstId;
+      lastFirstQuestionIdRef.current = currentFirstId;
+
+      setQuestions(data);
+      setTotalCount(total);
+      setLoading(false);
+
+      if (navigationRef.current === "end") {
+        const newIndex = data.length - 1;
+        setCurrentIndex(newIndex);
+        if (viewMode === "list") setDetailIndex(newIndex);
+      } else if (!isSameBatch) {
+        // 默认重置到第一题（除非是位置恢复逻辑稍后会覆盖它，但这里重置是安全的）
+        // 注意：这里不要重置 visibleQuestionIndexRef，因为它用于位置恢复
+        // 只有当题目批次发生变化时才重置索引，避免收藏/背诵操作导致跳转
+        setCurrentIndex(0);
+        if (viewMode === "list" && detailIndex !== null) setDetailIndex(0);
+      }
+
+      navigationRef.current = null;
+
+      if (!isSameBatch) {
         setResults([]);
         setAnsweredQuestions({});
         setShowSummary(false);
-      } catch (error) {
-        toast.error("Failed to load questions");
-      } finally {
-        setLoading(false);
       }
+    } else if (!isQueryLoading && !queryData) {
+      // Handle case where loading finished but no data (e.g. error or empty)
+      setLoading(false);
     }
-    fetchQuestions();
-  }, [mode, category, offset, viewMode, quizParams, isCheckingResume]);
+  }, [queryData, isQueryLoading]);
+
+  // Sync loading state
+  // useEffect(() => {
+  //   setLoading(isQueryLoading);
+  // }, [isQueryLoading]);
+
+  // Removed original fetchQuestions useEffect
 
   // 位置恢复 - 只在进入list模式且第一次加载时执行
   useEffect(() => {
-    if (viewMode === "list" && !isCheckingResume && questions.length === 0) {
-      const savedPosition = loadSavedPosition();
-      if (savedPosition && savedPosition.offset !== offset) {
-        shouldScrollToPosition.current = true;
-        setOffset(savedPosition.offset);
-        // offset改变会触发重新fetch，然后在数据加载后设置detailIndex
-        return;
-      } else if (savedPosition && savedPosition.offset === offset) {
-        // 如果offset相同但是首次加载，也需要滚动
-        shouldScrollToPosition.current = true;
+    if (viewMode === "list" && !isCheckingResume) {
+      const currentKey = getPositionKey();
+
+      // 如果key变化了（切换了分类），重置加载状态
+      if (lastLoadedKeyRef.current !== currentKey) {
+        lastSavedPositionRef.current = null;
+        lastLoadedKeyRef.current = currentKey;
+        visibleQuestionIndexRef.current = 0;
+      }
+
+      // 只有当questions为空（首次加载）或者我们明确知道需要恢复时才执行
+      // 注意：由于使用了react-query，questions可能不为空（缓存），所以不能只依赖questions.length === 0
+      // 我们使用一个ref来标记是否已经尝试过恢复
+      if (!lastSavedPositionRef.current) {
+        const savedPosition = loadSavedPosition();
+        if (savedPosition) {
+          lastSavedPositionRef.current = savedPosition; // 标记已读取
+
+          if (savedPosition.offset !== offset) {
+            shouldScrollToPosition.current = true;
+            setOffset(savedPosition.offset);
+            return;
+          } else if (savedPosition.offset === offset) {
+            shouldScrollToPosition.current = true;
+          }
+        } else {
+          // 如果没有保存的位置，且offset不为0（可能是从其他分类切换过来的），重置offset
+          if (offset !== 0) {
+            setOffset(0);
+          }
+        }
       }
     }
-  }, [viewMode, mode, category]);
+  }, [viewMode, mode, category, filterType]);
 
   // 在questions加载完成后滚动到保存的题目位置
   useEffect(() => {
@@ -607,10 +861,12 @@ export function QuizView({ mode, category }: QuizViewProps) {
       viewMode,
       questionsLength: questions.length,
       shouldScroll: shouldScrollToPosition.current,
+      detailIndex,
     });
 
     if (
       viewMode === "list" &&
+      detailIndex === null &&
       questions.length > 0 &&
       shouldScrollToPosition.current
     ) {
@@ -618,37 +874,27 @@ export function QuizView({ mode, category }: QuizViewProps) {
       console.log("Saved position:", savedPosition);
       console.log("Current offset:", offset);
 
-      if (
-        savedPosition &&
-        savedPosition.offset === offset &&
-        savedPosition.questionIndex < questions.length
-      ) {
-        console.log(
-          "Attempting to scroll to index:",
-          savedPosition.questionIndex
-        );
-
-        // 增加更长的延迟以确保DOM完全渲染
-        setTimeout(() => {
-          const targetElement =
-            questionRefs.current[savedPosition.questionIndex];
-          console.log("Target element:", targetElement);
-          console.log("All refs:", questionRefs.current);
-
-          if (targetElement) {
-            console.log("Scrolling to element");
-            targetElement.scrollIntoView({
-              behavior: "smooth",
-              block: "start",
-            });
-          } else {
-            console.warn("Target element not found, refs not ready yet");
+      if (savedPosition && savedPosition.offset === offset) {
+        // 尝试多次恢复位置，以应对图片加载导致的布局变化
+        let attempts = 0;
+        const tryRestore = () => {
+          const success = restorePosition(savedPosition);
+          if (!success && attempts < 20) {
+            // Increase attempts
+            attempts++;
+            setTimeout(tryRestore, 100);
+          } else if (success) {
+            shouldScrollToPosition.current = false;
+            // 再次确认，防止图片加载后的偏移
+            setTimeout(() => restorePosition(savedPosition), 500);
           }
-          shouldScrollToPosition.current = false;
-        }, 500); // 增加到500ms
+        };
+
+        // 立即尝试
+        setTimeout(tryRestore, 50);
       }
     }
-  }, [questions, viewMode, offset]);
+  }, [questions, viewMode, offset, detailIndex, mode, category, filterType]);
 
   // Reset state when changing questions
   useEffect(() => {
@@ -672,7 +918,7 @@ export function QuizView({ mode, category }: QuizViewProps) {
       }
 
       if (mode !== "mock") {
-        setShowAnswer(false);
+        setShowAnswer(mode === "notes");
         setIsSubmitted(false);
       }
     }
@@ -683,7 +929,7 @@ export function QuizView({ mode, category }: QuizViewProps) {
     // 初始化refs数组
     questionRefs.current = new Array(questions.length).fill(null);
 
-    if (viewMode === "list" && questions.length > 0) {
+    if (viewMode === "list" && detailIndex === null && questions.length > 0) {
       const observer = new IntersectionObserver(
         (entries) => {
           entries.forEach((entry) => {
@@ -692,16 +938,22 @@ export function QuizView({ mode, category }: QuizViewProps) {
                 entry.target.getAttribute("data-question-index")
               );
               if (!isNaN(index)) {
+                // 更新当前索引
+                visibleQuestionIndexRef.current = index;
                 setVisibleQuestionIndex(index);
-                // 保存当前可见题目的位置
-                savePosition(offset, index);
+
+                // 实时保存位置（为了性能，这里不频繁写入localStorage，主要依赖scroll事件）
+                // 但如果用户只是慢慢滑动，这里能提供更即时的反馈
               }
             }
           });
         },
         {
-          threshold: 0.5, // 当题目50%可见时触发
-          rootMargin: "-50px 0px -50px 0px", // 减少触发区域，更精确定位
+          root: scrollContainerRef.current, // 使用滚动容器作为root
+          // 视口顶部向下偏移80px（避开header），底部向上偏移80%（只关注顶部区域）
+          // 这样只有当题目进入屏幕上方的"阅读区"时才会触发
+          rootMargin: "-80px 0px -80% 0px",
+          threshold: 0,
         }
       );
 
@@ -716,8 +968,7 @@ export function QuizView({ mode, category }: QuizViewProps) {
         observer.disconnect();
       };
     }
-  }, [questions, viewMode, offset]);
-
+  }, [questions, viewMode, offset, detailIndex]);
   const currentQuestion = questions[currentIndex];
 
   const handleOptionSelect = (value: string) => {
@@ -740,26 +991,9 @@ export function QuizView({ mode, category }: QuizViewProps) {
   };
 
   const handleCollect = async () => {
-    const newStatus = !currentQuestion.isCollected;
-    // Optimistic update
-    const updatedQuestions = [...questions];
-    updatedQuestions[currentIndex].isCollected = newStatus;
-    setQuestions(updatedQuestions);
-
-    try {
-      await fetch("/api/collect", {
-        method: "POST",
-        body: JSON.stringify({
-          questionId: currentQuestion.id,
-          isCollected: newStatus,
-        }),
-      });
-      toast.success(newStatus ? "Collected" : "Removed from collection");
-    } catch (error) {
-      toast.error("Failed to update collection");
-      // Revert
-      updatedQuestions[currentIndex].isCollected = !newStatus;
-      setQuestions(updatedQuestions);
+    // Use the new toggleCollection function which handles optimistic updates
+    if (currentQuestion) {
+      toggleCollection(currentQuestion.id);
     }
   };
 
@@ -879,7 +1113,7 @@ export function QuizView({ mode, category }: QuizViewProps) {
       setCurrentIndex((prev) => prev + 1);
       // selectedAnswers will be updated by useEffect
       if (mode !== "mock") {
-        setShowAnswer(false);
+        setShowAnswer(mode === "notes");
         setIsSubmitted(false);
       }
     } else {
@@ -897,7 +1131,7 @@ export function QuizView({ mode, category }: QuizViewProps) {
       setCurrentIndex((prev) => prev - 1);
       // selectedAnswers will be updated by useEffect
       if (mode !== "mock") {
-        setShowAnswer(false);
+        setShowAnswer(mode === "notes");
         setIsSubmitted(false);
       }
     }
@@ -913,7 +1147,7 @@ export function QuizView({ mode, category }: QuizViewProps) {
       navigationRef.current = "end";
       const newOffset = offset - limit;
       setOffset(newOffset);
-      savePosition(newOffset, 0); // 保存新页面位置
+      savePosition(newOffset, 0, 0); // 保存新页面位置，重置滚动
     }
   };
 
@@ -924,10 +1158,11 @@ export function QuizView({ mode, category }: QuizViewProps) {
       setDetailIndex((prev) => (prev !== null ? prev + 1 : null));
       savePosition(offset, newIndex); // 保存新位置
     } else if (hasMore) {
+      if (!checkSubscription()) return;
       navigationRef.current = "start";
       const newOffset = offset + limit;
       setOffset(newOffset);
-      savePosition(newOffset, 0); // 保存新页面位置
+      savePosition(newOffset, 0, 0); // 保存新页面位置，重置滚动
     }
   };
 
@@ -936,9 +1171,61 @@ export function QuizView({ mode, category }: QuizViewProps) {
     setIsSheetOpen(false);
     // State restoration handled by useEffect
     if (mode !== "mock" && !answeredQuestions.hasOwnProperty(index)) {
-      setShowAnswer(false);
+      setShowAnswer(mode === "notes");
       setIsSubmitted(false);
     }
+  };
+
+  // Progress bar effect
+  useEffect(() => {
+    if (loading || isQueryLoading || (questions.length === 0 && isFetching)) {
+      setProgress(13);
+      const timer = setInterval(() => {
+        setProgress((oldProgress) => {
+          if (oldProgress >= 90) {
+            return 90;
+          }
+          const diff = Math.random() * 10;
+          return Math.min(oldProgress + diff, 90);
+        });
+      }, 500);
+
+      return () => {
+        clearInterval(timer);
+      };
+    } else {
+      setProgress(100);
+    }
+  }, [loading, isQueryLoading, isFetching, questions.length]);
+
+  const handleSubscribe = async () => {
+    setIsCheckingSubscription(true);
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+      });
+      if (res.ok) {
+        const { url } = await res.json();
+        window.location.href = url;
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        console.error("Subscription failed:", errorData);
+        toast.error(`无法启动支付: ${errorData.error || "请稍后重试"}`);
+      }
+    } catch (error) {
+      console.error("Subscription error:", error);
+      toast.error("发生错误");
+    } finally {
+      setIsCheckingSubscription(false);
+    }
+  };
+
+  const checkSubscription = () => {
+    if (!isPaid) {
+      setShowSubscriptionDialog(true);
+      return false;
+    }
+    return true;
   };
 
   if (isCheckingResume) {
@@ -977,7 +1264,15 @@ export function QuizView({ mode, category }: QuizViewProps) {
     );
   }
 
-  if (loading) return <div className="p-8 text-center">加载题目中...</div>;
+  if (loading || isQueryLoading || (questions.length === 0 && isFetching))
+    return (
+      <div className="flex flex-col items-center justify-center h-screen gap-4">
+        <div className="text-lg font-medium text-muted-foreground">
+          题目加载中...
+        </div>
+        <Progress value={progress} className="w-[60%] md:w-[40%]" />
+      </div>
+    );
   if (questions.length === 0)
     return <div className="p-8 text-center">没找到题目</div>;
 
@@ -1060,7 +1355,29 @@ export function QuizView({ mode, category }: QuizViewProps) {
           size="icon"
           onClick={() => {
             if (viewMode === "list" && detailIndex !== null) {
+              // 返回列表时，不需要手动保存位置，因为我们希望恢复到进入时的位置
+              // 或者如果用户在详情页翻页了，我们希望回到新的位置？
+              // 目前逻辑是：进入详情页时保存了位置。
+              // 如果在详情页翻页了，currentIndex变了。
+              // 返回时，我们应该回到currentIndex对应的位置。
+
+              // 让我们更新一下保存的位置，把questionIndex更新为当前的currentIndex
+              // 但是scrollTop应该怎么处理？
+              // 如果题目变了，原来的scrollTop可能不准确。
+              // 最好是让restorePosition去处理滚动到currentIndex
+
+              // 读取之前保存的scrollTop，以便尽可能保持上下文（如果是同一题）
+              // 但如果是不同题，scrollIntoView会自动处理
+
+              const saved = loadSavedPosition();
+              if (saved) {
+                // 更新索引为当前浏览的题目
+                savePosition(saved.offset, currentIndex, saved.scrollTop);
+              }
+
               setDetailIndex(null);
+              // 触发一次恢复逻辑
+              shouldScrollToPosition.current = true;
             } else {
               if (mode === "mock") {
                 saveMockProgress();
@@ -1071,26 +1388,37 @@ export function QuizView({ mode, category }: QuizViewProps) {
         >
           <ChevronLeft className="w-6 h-6" />
         </Button>
-        <h1 className="font-medium truncate max-w-[200px]">
-          {category ||
-            (mode === "mock"
-              ? "模拟试卷"
-              : mode === "mistakes"
-              ? "错题强化"
-              : mode === "collection"
-              ? "试题收藏"
-              : "练习")}{" "}
-          {viewMode === "list" && detailIndex === null
-            ? `(${totalCount})`
-            : `(${
-                viewMode === "list" && detailIndex !== null
-                  ? offset + currentIndex + 1
-                  : currentIndex + 1
-              }/${
-                viewMode === "list" && detailIndex !== null
-                  ? totalCount
-                  : questions.length
-              })`}
+        <h1 className="font-medium flex items-center gap-1 overflow-hidden">
+          <span className="truncate max-w-[150px]">
+            {category ||
+              (mode === "mock"
+                ? "模拟试卷"
+                : mode === "mistakes"
+                ? "错题强化"
+                : mode === "collection"
+                ? "试题收藏"
+                : mode === "notes"
+                ? "我的笔记"
+                : "练习")}
+          </span>
+          {category && filterType && filterType !== "all" && (
+            <span className="text-base font-bold text-muted-foreground bg-secondary/50 px-1.5 py-0.5 rounded-md whitespace-nowrap flex-shrink-0">
+              {getFilterLabel(filterType)}
+            </span>
+          )}
+          <span className="flex-shrink-0">
+            {viewMode === "list" && detailIndex === null
+              ? `(${totalCount})`
+              : `(${
+                  viewMode === "list" && detailIndex !== null
+                    ? offset + currentIndex + 1
+                    : currentIndex + 1
+                }/${
+                  viewMode === "list" && detailIndex !== null
+                    ? totalCount
+                    : questions.length
+                })`}
+          </span>
         </h1>
         <div className="flex gap-2 items-center">
           {mode === "mock" && (
@@ -1120,43 +1448,29 @@ export function QuizView({ mode, category }: QuizViewProps) {
               </Button>
             </>
           )}
-          {mode === "category" && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="px-2"
-              onClick={() => {
-                if (viewMode === "card") {
-                  setViewMode("list");
-                  setOffset(0);
-                  setHasMore(true);
-                  setQuestions([]);
-                  setDetailIndex(null);
-                  setQuizParams(null);
-                } else {
-                  setIsConfiguring(true);
-                }
-              }}
-            >
-              {viewMode === "card" ? "背诵模式" : "答题模式"}
-            </Button>
-          )}
-          {!(viewMode === "list" && detailIndex === null) && (
-            <>
-              <Button variant="ghost" size="icon" onClick={handleCollect}>
-                <Star
-                  className={`w-6 h-6 ${
-                    currentQuestion?.isCollected
-                      ? "fill-yellow-400 text-yellow-400"
-                      : "text-gray-400"
-                  }`}
-                />
+          {mode === "category" &&
+            !(viewMode === "list" && detailIndex !== null) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="px-2"
+                onClick={() => {
+                  if (viewMode === "card") {
+                    setViewMode("list");
+                    setOffset(0);
+                    setHasMore(true);
+                    setQuestions([]);
+                    setDetailIndex(null);
+                    setQuizParams(null);
+                  } else {
+                    setIsConfiguring(true);
+                  }
+                }}
+              >
+                {viewMode === "card" ? "背诵模式" : "答题模式"}
               </Button>
-              <Button variant="ghost" size="icon">
-                <Settings className="w-6 h-6" />
-              </Button>
-            </>
-          )}
+            )}
+          {viewMode === "card" && <>{/* 移除收藏和设置按钮 */}</>}
         </div>
       </header>
 
@@ -1175,7 +1489,7 @@ export function QuizView({ mode, category }: QuizViewProps) {
       )}
 
       {/* Content */}
-      <main className="flex-1 overflow-y-auto p-4">
+      <main ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4">
         {viewMode === "list" && detailIndex === null ? (
           <div className="space-y-3">
             {questions.map((q, i) => (
@@ -1185,17 +1499,22 @@ export function QuizView({ mode, category }: QuizViewProps) {
                   questionRefs.current[i] = el;
                 }}
                 data-question-index={i}
+                className="scroll-mt-24"
               >
                 <Card
                   className="p-2 cursor-pointer hover:shadow-md transition-shadow gap-0"
                   onClick={() => {
+                    // 标记正在导航到详情页，阻止handleScroll和cleanup保存错误的位置
+                    isNavigatingToDetailRef.current = true;
+
+                    // 保存当前位置（包含滚动位置）
+                    // 必须在切换状态前保存，否则scrollContainerRef可能变空或高度变化
+                    const currentScrollTop =
+                      scrollContainerRef.current?.scrollTop || 0;
+                    savePosition(offset, i, currentScrollTop);
+
                     setDetailIndex(i);
                     setCurrentIndex(i);
-                    // 保存当前位置（包含滚动位置）
-                    const currentScrollTop =
-                      document.documentElement.scrollTop ||
-                      document.body.scrollTop;
-                    savePosition(offset, i, currentScrollTop);
                   }}
                 >
                   <div className="flex gap-2">
@@ -1320,7 +1639,7 @@ export function QuizView({ mode, category }: QuizViewProps) {
                               d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
                             />
                           </svg>
-                          收藏
+                          未收藏
                         </>
                       )}
                     </button>
@@ -1345,7 +1664,7 @@ export function QuizView({ mode, category }: QuizViewProps) {
                           >
                             <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
-                          已背诵
+                          已浏览
                         </>
                       ) : (
                         <>
@@ -1359,10 +1678,16 @@ export function QuizView({ mode, category }: QuizViewProps) {
                               strokeLinecap="round"
                               strokeLinejoin="round"
                               strokeWidth={2}
-                              d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                            />
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
                             />
                           </svg>
-                          标记背诵
+                          标记浏览
                         </>
                       )}
                     </button>
@@ -1373,21 +1698,21 @@ export function QuizView({ mode, category }: QuizViewProps) {
           </div>
         ) : (
           <>
-            <div className="mb-4">
-              <span className="inline-block bg-orange-500 text-white text-xs px-2 py-1 rounded mr-2">
+            <div className="mb-2">
+              <span className="inline-block bg-orange-500 text-white text-xs px-2 py-1 rounded mr-2 align-middle">
                 {currentQuestion.type === "SINGLE"
                   ? "单选题"
                   : currentQuestion.type === "MULTIPLE"
                   ? "多选题"
                   : "判断题"}
               </span>
-              <span className="text-lg font-medium">
+              <span className="text-base font-medium align-middle">
                 {currentQuestion.content}
               </span>
             </div>
 
             {currentQuestion.image && (
-              <div className="mb-4">
+              <div className="mb-2">
                 <img
                   src={currentQuestion.image}
                   alt="Question Image"
@@ -1396,7 +1721,7 @@ export function QuizView({ mode, category }: QuizViewProps) {
               </div>
             )}
 
-            <div className="space-y-3">
+            <div className="space-y-2">
               {options.map((opt: any) => {
                 const isSelected = selectedAnswers.includes(opt.label);
                 const isCorrect = currentQuestion.answer.includes(opt.label);
@@ -1416,13 +1741,13 @@ export function QuizView({ mode, category }: QuizViewProps) {
                 return (
                   <div
                     key={opt.label}
-                    className={`flex items-center p-4 border rounded-xl cursor-pointer transition-colors ${optionStyle}`}
+                    className={`flex items-center p-3 border rounded-lg cursor-pointer transition-colors ${optionStyle}`}
                     onClick={() =>
                       !isReciteMode && handleOptionSelect(opt.label)
                     }
                   >
                     <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 border ${
+                      className={`w-6 h-6 rounded-full flex items-center justify-center mr-2 text-xs border ${
                         isSelected || (shouldShowAnswer && isCorrect)
                           ? "bg-orange-500 border-orange-500 text-white"
                           : "border-gray-300 text-gray-500"
@@ -1430,14 +1755,14 @@ export function QuizView({ mode, category }: QuizViewProps) {
                     >
                       {opt.label}
                     </div>
-                    <span className="flex-1">{opt.value}</span>
+                    <span className="flex-1 text-sm">{opt.value}</span>
                   </div>
                 );
               })}
             </div>
 
             {(showAnswer || (viewMode === "list" && detailIndex !== null)) && (
-              <div className="mt-6 p-4 bg-gray-100 rounded-xl">
+              <div className="mt-4 p-3 bg-gray-100 rounded-lg">
                 <div className="font-bold mb-2">答案解析</div>
                 <div className="mb-2">
                   正确答案:{" "}
@@ -1483,7 +1808,7 @@ export function QuizView({ mode, category }: QuizViewProps) {
       </main>
 
       {/* Footer */}
-      <footer className="bg-white p-4 border-t flex justify-between items-center">
+      <footer className="bg-white p-2 border-t flex justify-between items-center">
         {viewMode === "list" && detailIndex === null ? (
           <>
             <Button
@@ -1508,22 +1833,84 @@ export function QuizView({ mode, category }: QuizViewProps) {
                 onClick={() => {
                   const newOffset = Math.max(0, offset - limit);
                   setOffset(newOffset);
-                  savePosition(newOffset, 0); // 切换页面时保存位置
+                  savePosition(newOffset, 0, 0); // 切换页面时保存位置，重置滚动
                 }}
                 disabled={offset === 0}
               >
                 上一页
               </Button>
-              <span className="text-sm font-medium">
-                {Math.floor(offset / limit) + 1}/{Math.ceil(totalCount / limit)}
-              </span>
+
+              <Sheet open={isPageSheetOpen} onOpenChange={setIsPageSheetOpen}>
+                <SheetTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-sm font-medium h-auto py-1 px-2"
+                  >
+                    {Math.floor(offset / limit) + 1}/
+                    {Math.ceil(totalCount / limit)}
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="bottom" className="h-[50vh] rounded-t-xl">
+                  <SheetHeader>
+                    <SheetTitle className="p-0">选择页码</SheetTitle>
+                  </SheetHeader>
+                  <div className="mt-4 grid grid-cols-5 gap-3 overflow-y-auto max-h-[40vh] p-2">
+                    {Array.from({ length: Math.ceil(totalCount / limit) }).map(
+                      (_, i) => {
+                        const pageNum = i + 1;
+                        const isCurrent =
+                          Math.floor(offset / limit) + 1 === pageNum;
+                        const pageType = queryData?.pageTypes?.[i];
+                        const typeText =
+                          pageType === "SINGLE"
+                            ? "单选"
+                            : pageType === "MULTIPLE"
+                            ? "多选"
+                            : pageType === "JUDGE"
+                            ? "判断"
+                            : "";
+
+                        return (
+                          <Button
+                            key={i}
+                            variant={isCurrent ? "default" : "outline"}
+                            className={`flex flex-col h-auto py-2 ${
+                              isCurrent
+                                ? "bg-orange-500 hover:bg-orange-600"
+                                : ""
+                            }`}
+                            onClick={() => {
+                              const newOffset = i * limit;
+                              setOffset(newOffset);
+                              savePosition(newOffset, 0, 0);
+                              setIsPageSheetOpen(false);
+                            }}
+                          >
+                            <span className="text-lg leading-none">
+                              {pageNum}
+                            </span>
+                            {typeText && (
+                              <span className="text-[10px] opacity-70 leading-none mt-1">
+                                {typeText}
+                              </span>
+                            )}
+                          </Button>
+                        );
+                      }
+                    )}
+                  </div>
+                </SheetContent>
+              </Sheet>
+
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => {
+                  if (!checkSubscription()) return;
                   const newOffset = offset + limit;
                   setOffset(newOffset);
-                  savePosition(newOffset, 0); // 切换页面时保存位置
+                  savePosition(newOffset, 0, 0); // 切换页面时保存位置，重置滚动
                 }}
                 disabled={!hasMore}
               >
@@ -1532,50 +1919,119 @@ export function QuizView({ mode, category }: QuizViewProps) {
             </div>
           </>
         ) : viewMode === "list" && detailIndex !== null ? (
-          <div className="flex gap-2 w-full">
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={() => setDetailIndex(null)}
-            >
-              返回列表
-            </Button>
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={handleRecitePrev}
-              disabled={currentIndex === 0 && offset === 0}
-            >
-              上一题
-            </Button>
-            <Button
-              className="flex-1 bg-orange-500 hover:bg-orange-600"
-              onClick={handleReciteNext}
-              disabled={!hasMore && currentIndex === questions.length - 1}
-            >
-              下一题
-            </Button>
+          <div className="flex gap-2 w-full items-center justify-between">
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                className="flex-col gap-1 h-auto py-2 px-2"
+                onClick={handleCollect}
+              >
+                <Star
+                  className={`w-5 h-5 ${
+                    currentQuestion.isCollected
+                      ? "fill-yellow-400 text-yellow-400"
+                      : ""
+                  }`}
+                />
+                <span className="text-[10px]">
+                  {currentQuestion.isCollected ? "已收藏" : "未收藏"}
+                </span>
+              </Button>
+
+              <Button
+                variant="ghost"
+                className="flex-col gap-1 h-auto py-2 px-2"
+                onClick={() => toggleRecited(currentQuestion.id)}
+              >
+                <Bookmark
+                  className={`w-5 h-5 ${
+                    currentQuestion.isRecited
+                      ? "fill-green-500 text-green-500"
+                      : ""
+                  }`}
+                />
+                <span className="text-[10px]">
+                  {currentQuestion.isRecited ? "已浏览" : "未浏览"}
+                </span>
+              </Button>
+            </div>
+
+            <div className="flex gap-2 flex-1 justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRecitePrev}
+                disabled={currentIndex === 0 && offset === 0}
+              >
+                <ChevronLeft className="h-4 w-4 sm:hidden" />
+                <span className="hidden sm:inline">上一题</span>
+              </Button>
+              <Button
+                className="bg-orange-500 hover:bg-orange-600"
+                onClick={handleReciteNext}
+                disabled={!hasMore && currentIndex === questions.length - 1}
+              >
+                <span className="hidden sm:inline">下一题</span>
+                <ChevronRight className="h-4 w-4 sm:hidden" />
+              </Button>
+            </div>
           </div>
         ) : (
           <>
-            <div className="flex gap-4">
+            <div className="flex gap-0.5 sm:gap-2">
+              {mode !== "mock" && (
+                <Button
+                  variant="ghost"
+                  className="flex-col gap-1 h-auto py-0 sm:px-4"
+                  onClick={() => setShowAnswer(!showAnswer)}
+                >
+                  <Eye className="w-5 h-5" />
+                  <span className="text-[10px] sm:text-xs">答案</span>
+                </Button>
+              )}
+
               <Button
                 variant="ghost"
-                className="flex-col gap-1 h-auto py-2"
-                onClick={() => setShowAnswer(!showAnswer)}
+                className="flex-col gap-1 h-auto py-0 sm:px-4"
+                onClick={handleCollect}
               >
-                <Eye className="w-5 h-5" />
-                <span className="text-xs">答案</span>
+                <Star
+                  className={`w-5 h-5 ${
+                    currentQuestion.isCollected
+                      ? "fill-yellow-400 text-yellow-400"
+                      : ""
+                  }`}
+                />
+                <span className="text-[10px] sm:text-xs">
+                  {currentQuestion.isCollected ? "已收藏" : "未收藏"}
+                </span>
+              </Button>
+
+              <Button
+                variant="ghost"
+                className="flex-col gap-1 h-auto py-0 sm:px-4"
+                onClick={() => toggleRecited(currentQuestion.id)}
+              >
+                <Bookmark
+                  className={`w-5 h-5 ${
+                    currentQuestion.isRecited
+                      ? "fill-green-500 text-green-500"
+                      : ""
+                  }`}
+                />
+                <span className="text-[10px] sm:text-xs">
+                  {currentQuestion.isRecited ? "已浏览" : "未浏览"}
+                </span>
               </Button>
 
               <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
                 <SheetTrigger asChild>
                   <Button
                     variant="ghost"
-                    className="flex-col gap-1 h-auto py-2"
+                    className="flex-col gap-1 h-auto py-2 px-1 sm:px-4"
                   >
                     <Grid className="w-5 h-5" />
-                    <span className="text-xs">答题卡</span>
+                    <span className="text-[10px] sm:text-xs">答题卡</span>
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="bottom" className="h-[80vh] rounded-t-xl">
@@ -1642,34 +2098,42 @@ export function QuizView({ mode, category }: QuizViewProps) {
               </Sheet>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-1 justify-end min-w-0">
               <Button
                 variant="outline"
+                size="sm"
                 onClick={handlePrev}
                 disabled={currentIndex === 0}
+                className="shrink-0 px-2 sm:px-3"
               >
-                上一题
+                <ChevronLeft className="h-4 w-4 sm:hidden" />
+                <span className="hidden sm:inline">上一题</span>
               </Button>
               {mode === "mock" ? (
                 currentIndex < questions.length - 1 ? (
                   <Button
+                    size="sm"
                     onClick={handleNext}
-                    className="bg-orange-500 hover:bg-orange-600"
+                    className="bg-orange-500 hover:bg-orange-600 shrink-0 px-2 sm:px-3"
                   >
-                    下一题
+                    <span className="hidden sm:inline">下一题</span>
+                    <ChevronRight className="h-4 w-4 sm:hidden" />
                   </Button>
                 ) : null
               ) : isSubmitted || showAnswer ? (
                 <Button
+                  size="sm"
                   onClick={handleNext}
-                  className="bg-orange-500 hover:bg-orange-600"
+                  className="bg-orange-500 hover:bg-orange-600 shrink-0 px-2 sm:px-3"
                 >
-                  下一题
+                  <span className="hidden sm:inline">下一题</span>
+                  <ChevronRight className="h-4 w-4 sm:hidden" />
                 </Button>
               ) : (
                 <Button
+                  size="sm"
                   onClick={handleSubmit}
-                  className="bg-orange-500 hover:bg-orange-600"
+                  className="bg-orange-500 hover:bg-orange-600 shrink-0 px-2 sm:px-3"
                   disabled={selectedAnswers.length === 0}
                 >
                   提交
@@ -1687,7 +2151,7 @@ export function QuizView({ mode, category }: QuizViewProps) {
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">题目数量</Label>
+              <Label className="text-right w-20">题目数量</Label>
               <Select
                 value={quizConfig.count}
                 onValueChange={(val) =>
@@ -1706,7 +2170,7 @@ export function QuizView({ mode, category }: QuizViewProps) {
               </Select>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">出题顺序</Label>
+              <Label className="text-right w-20">出题顺序</Label>
               <RadioGroup
                 value={quizConfig.random ? "random" : "sequential"}
                 onValueChange={(val) =>
@@ -1741,6 +2205,39 @@ export function QuizView({ mode, category }: QuizViewProps) {
               }}
             >
               开始答题
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showSubscriptionDialog}
+        onOpenChange={setShowSubscriptionDialog}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>开通会员</DialogTitle>
+            <DialogDescription>
+              解锁所有题目和高级功能，仅需 9.9 元/2个月
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <ul className="list-disc list-inside space-y-2 text-sm text-gray-600">
+              <li>解锁所有 2000+ 题目</li>
+              <li>无限制查看答案解析</li>
+              <li>专属错题本和收藏夹</li>
+              <li>模拟考试功能</li>
+            </ul>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowSubscriptionDialog(false)}
+            >
+              取消
+            </Button>
+            <Button onClick={handleSubscribe} disabled={isCheckingSubscription}>
+              {isCheckingSubscription ? "处理中..." : "立即开通 (¥9.9)"}
             </Button>
           </DialogFooter>
         </DialogContent>
