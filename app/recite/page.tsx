@@ -2,10 +2,10 @@
 
 import { authClient } from "@/lib/auth-client";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, Suspense } from "react";
 import { QuizView } from "@/components/quiz-view";
 
-export default function RecitePage() {
+function ReciteContent() {
   const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -24,4 +24,12 @@ export default function RecitePage() {
   if (!session) return null;
 
   return <QuizView mode="recite" category={category} />;
+}
+
+export default function RecitePage() {
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center">加载中...</div>}>
+      <ReciteContent />
+    </Suspense>
+  );
 }
