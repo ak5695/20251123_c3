@@ -2284,9 +2284,11 @@ export function QuizView({
           </DialogHeader>
           <div className="py-4">
             <ul className="list-disc list-inside space-y-2 text-sm text-gray-600">
-              <li>解锁所有 2000+ 题目</li>
+              <li>解锁所有2965道官方最新题库</li>
               <li>无限制查看答案解析</li>
+              <li>无限制查看记忆方法</li>
               <li>专属错题本和收藏夹</li>
+              <li>标注已浏览的题目</li>
               <li>模拟考试功能</li>
             </ul>
           </div>
