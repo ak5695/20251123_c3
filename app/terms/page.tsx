@@ -66,11 +66,12 @@ export default function TermsPage() {
                   <strong>3.1 服务内容</strong>
                 </p>
                 <ul className="list-disc list-inside ml-4 space-y-1">
-                  <li>无限制练习题目</li>
-                  <li>错题收藏和强化练习</li>
-                  <li>学习记录和进度跟踪</li>
-                  <li>模拟考试功能</li>
-                  <li>学习笔记功能</li>
+              <li>解锁所有2965道官方最新题库</li>
+              <li>无限制查看答案解析</li>
+              <li>无限制查看记忆方法</li>
+              <li>专属错题本和收藏夹</li>
+              <li>标注已浏览的题目</li>
+              <li>模拟考试功能</li>
                 </ul>
 
                 <p className="mt-4">

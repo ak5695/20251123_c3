@@ -1389,7 +1389,7 @@ export function QuizView({
 
   return (
     <div
-      className="flex flex-col h-screen bg-gray-50"
+      className="flex flex-col h-screen bg-gray-50 relative"
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
@@ -1540,7 +1540,7 @@ export function QuizView({
                 className="scroll-mt-24"
               >
                 <Card
-                  className="p-2 cursor-pointer hover:shadow-md transition-all active:scale-[0.98] gap-0"
+                  className="p-2 cursor-pointer hover:shadow-md transition-all active:scale-95 gap-0"
                   onClick={() => {
                     vibrate();
                     // 标记正在导航到详情页，阻止handleScroll和cleanup保存错误的位置
@@ -1798,7 +1798,7 @@ export function QuizView({
                 return (
                   <div
                     key={opt.label}
-                    className={`flex items-center p-3 border rounded-lg cursor-pointer transition-all active:scale-[0.98] ${optionStyle}`}
+                    className={`flex items-center p-3 border rounded-lg cursor-pointer transition-all active:scale-95 ${optionStyle}`}
                     onClick={() => {
                       if (!isReciteMode) {
                         vibrate();

@@ -20,9 +20,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`antialiased`}>
+      <body className={`antialiased bg-gray-100`}>
         <Providers>
-          {children}
+          <div className="mx-auto max-w-lg min-h-screen bg-gray-50 shadow-2xl">
+            {children}
+          </div>
           <Toaster />
         </Providers>
       </body>

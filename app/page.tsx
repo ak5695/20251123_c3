@@ -146,7 +146,7 @@ export default function Dashboard() {
   }) => (
     <button
       onClick={onClick}
-      className={`flex flex-col items-center justify-center p-1 rounded hover:bg-gray-50 transition-all active:scale-95 w-full ${bgColor} bg-opacity-20`}
+      className={`flex flex-col items-center justify-center p-1 rounded hover:bg-gray-50 transition-all active:scale-90 w-full ${bgColor} bg-opacity-20 hover:bg-opacity-30`}
     >
       <span className={`text-sm font-bold ${color}`}>{value}</span>
       <span className="text-[10px] text-gray-500">{label}</span>
@@ -282,13 +282,13 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="p-2 space-y-2 max-w-md mx-auto">
+      <main className="p-2 space-y-2">
         {/* Top Actions */}
         <div className="grid grid-cols-3 gap-2 mb-2">
           {topActions.map((action) => (
             <Card
               key={action.label}
-              className="cursor-pointer hover:shadow-md transition-all active:scale-95 border-none shadow-sm py-2"
+              className="cursor-pointer hover:shadow-md transition-all active:scale-90 border-none shadow-sm py-2"
               onClick={() => router.push(action.href)}
             >
               <CardContent className="flex flex-col items-center justify-center p-0 gap-2">
