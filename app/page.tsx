@@ -146,7 +146,7 @@ export default function Dashboard() {
   }) => (
     <button
       onClick={onClick}
-      className={`flex flex-col items-center justify-center p-1 rounded hover:bg-gray-50 transition-all active:scale-90 w-full ${bgColor} bg-opacity-20 hover:bg-opacity-30`}
+      className={`cursor-pointer flex flex-col items-center justify-center p-1 rounded hover:bg-gray-50 transition-all active:scale-90 w-full ${bgColor} bg-opacity-20 hover:bg-opacity-30`}
     >
       <span className={`text-sm font-bold ${color}`}>{value}</span>
       <span className="text-[10px] text-gray-500">{label}</span>

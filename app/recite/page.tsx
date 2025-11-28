@@ -4,12 +4,23 @@ import { authClient } from "@/lib/auth-client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, Suspense } from "react";
 import { QuizView } from "@/components/quiz-view";
+import { useQuery } from "@tanstack/react-query";
 
 function ReciteContent() {
   const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
   const category = searchParams.get("category") || undefined;
+
+  const { data: userProfile } = useQuery({
+    queryKey: ["user-profile"],
+    queryFn: async () => {
+      const res = await fetch("/api/user/profile");
+      if (!res.ok) throw new Error("Failed to fetch profile");
+      return res.json();
+    },
+    enabled: !!session,
+  });
 
   useEffect(() => {
     if (!isPending && !session) {
@@ -23,7 +34,9 @@ function ReciteContent() {
     );
   if (!session) return null;
 
-  return <QuizView mode="recite" category={category} />;
+  return (
+    <QuizView mode="recite" category={category} isPaid={userProfile?.isPaid} />
+  );
 }
 
 export default function RecitePage() {

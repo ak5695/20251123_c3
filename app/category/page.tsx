@@ -5,11 +5,25 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { QuizView } from "@/components/quiz-view";
 import { BookOpen, AlertTriangle, Star, Layers, Loader2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { authClient } from "@/lib/auth-client";
 
 function CategoryContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const category = searchParams.get("category") || "";
+  const { data: session } = authClient.useSession();
+
+  const { data: userProfile } = useQuery({
+    queryKey: ["user-profile"],
+    queryFn: async () => {
+      const res = await fetch("/api/user/profile");
+      if (!res.ok) throw new Error("Failed to fetch profile");
+      return res.json();
+    },
+    enabled: !!session,
+  });
+
   const [stats, setStats] = useState({
     unanswered: 0,
     mistakes: 0,
@@ -78,7 +92,11 @@ function CategoryContent() {
           </Card>
         ))}
       </div>
-      <QuizView mode="recite" category={category} />
+      <QuizView
+        mode="recite"
+        category={category}
+        isPaid={userProfile?.isPaid}
+      />
     </div>
   );
 }
