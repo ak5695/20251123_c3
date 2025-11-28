@@ -62,8 +62,9 @@ export async function POST(req: NextRequest) {
 
       // Let's iterate and update.
       for (const ans of answers) {
-        const { questionId, isCorrect } = ans;
+        const { questionId, isCorrect, isAnswered } = ans;
         if (!questionId) continue;
+        if (isAnswered === false) continue; // Skip unanswered questions
 
         // We need to update correctCount/wrongCount and lastAnsweredAt
         // We can use a raw SQL upsert for better performance or just simple logic

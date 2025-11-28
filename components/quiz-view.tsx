@@ -1066,11 +1066,16 @@ export function QuizView({
     clearMockProgress();
     let score = 0;
     let correctCount = 0;
-    const newResults: { id: number; isCorrect: boolean }[] = [];
+    const newResults: {
+      id: number;
+      isCorrect: boolean;
+      isAnswered: boolean;
+    }[] = [];
 
     questions.forEach((q, index) => {
       const userAns = allUserAnswers[index] || [];
       const userAnsStr = userAns.join("");
+      const isAnswered = userAns.length > 0;
 
       let points = 0;
       let isCorrect = false;
@@ -1091,7 +1096,7 @@ export function QuizView({
 
       if (isCorrect) correctCount++;
       score += points;
-      newResults.push({ id: q.id, isCorrect });
+      newResults.push({ id: q.id, isCorrect, isAnswered });
     });
 
     setMockScore(score);
@@ -1102,6 +1107,7 @@ export function QuizView({
     const answersToSubmit = newResults.map((r) => ({
       questionId: r.id,
       isCorrect: r.isCorrect,
+      isAnswered: r.isAnswered,
     }));
 
     try {
