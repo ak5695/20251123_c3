@@ -22,12 +22,15 @@ export const auth = betterAuth({
       { user, url, token }: { user: User; url: string; token: string },
       request?: Request
     ) => {
-      await resend.emails.send({
+      const { error } = await resend.emails.send({
         from: "广东C3安考宝典 <noreply@c3.dufran.cn>",
         to: user.email,
         subject: "验证您的邮箱",
         html: `<p>请点击以下链接验证您的邮箱：<a href="${url}">${url}</a></p>`,
       });
+      if (error) {
+        console.error("Error sending verification email:", error);
+      }
     },
   },
   passwordReset: {
@@ -36,12 +39,15 @@ export const auth = betterAuth({
       { user, url, token }: { user: User; url: string; token: string },
       request?: Request
     ) => {
-      await resend.emails.send({
+      const { error } = await resend.emails.send({
         from: "广东C3安考宝典 <noreply@c3.dufran.cn>",
         to: user.email,
         subject: "重置您的密码",
         html: `<p>请点击以下链接重置您的密码：<a href="${url}">${url}</a></p>`,
       });
+      if (error) {
+        console.error("Error sending password reset email:", error);
+      }
     },
   },
   trustedOrigins: [
