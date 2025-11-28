@@ -1,4 +1,4 @@
-import { betterAuth } from "better-auth";
+import { betterAuth, type User } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "./db"; // Adjust path if needed
 import * as schema from "./db/schema";
@@ -18,7 +18,7 @@ export const auth = betterAuth({
   emailVerification: {
     enabled: true,
     sendOnSignUp: true,
-    sendVerificationEmail: async ({ user, url, token }, request) => {
+    sendVerificationEmail: async ({ user, url, token }: { user: User, url: string, token: string }, request?: Request) => {
       await resend.emails.send({
         from: "广东C3安考宝典 <noreply@c3.dufran.cn>",
         to: user.email,
@@ -29,7 +29,7 @@ export const auth = betterAuth({
   },
   passwordReset: {
     enabled: true,
-    sendResetPasswordEmail: async ({ user, url, token }, request) => {
+    sendResetPasswordEmail: async ({ user, url, token }: { user: User, url: string, token: string }, request?: Request) => {
       await resend.emails.send({
         from: "广东C3安考宝典 <noreply@c3.dufran.cn>",
         to: user.email,
