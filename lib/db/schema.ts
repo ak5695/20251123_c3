@@ -118,6 +118,7 @@ export const mockExamScores = pgTable("mock_exam_scores", {
   score: integer("score").notNull(),
   totalQuestions: integer("totalQuestions").notNull(),
   correctCount: integer("correctCount").notNull(),
+  answeredCount: integer("answeredCount").notNull().default(0),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

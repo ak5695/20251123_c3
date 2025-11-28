@@ -248,6 +248,8 @@ export function QuizView({
   const navigationRef = useRef<"start" | "end" | null>(null);
   const questionRefs = useRef<(HTMLDivElement | null)[]>([]);
   const shouldScrollToPosition = useRef(false);
+  const lastProcessedQuestionIdRef = useRef<number | null>(null);
+  const lastModeRef = useRef<string>(mode);
   const [visibleQuestionIndex, setVisibleQuestionIndex] = useState(0);
   const visibleQuestionIndexRef = useRef(0);
   const lastSavedPositionRef = useRef<any>(null);
@@ -379,9 +381,14 @@ export function QuizView({
   } | null>(null);
 
   const [showSummary, setShowSummary] = useState(false);
-  const [results, setResults] = useState<{ id: number; isCorrect: boolean }[]>(
-    []
-  );
+  const [results, setResults] = useState<
+    {
+      id: number;
+      isCorrect: boolean;
+      isAnswered?: boolean;
+      userAnswer?: string;
+    }[]
+  >([]);
 
   // Timer state for mock mode
   const [timeLeft, setTimeLeft] = useState(90 * 60); // 90 minutes in seconds
@@ -911,28 +918,44 @@ export function QuizView({
   // Reset state when changing questions
   useEffect(() => {
     const question = questions[currentIndex];
+    if (!question) return;
+
+    // Check if we should skip the effect
+    // We skip if the question ID is the same AND the mode is the same
+    // This prevents resetting state (like showAnswer) when we just updated the question status (e.g. marked as practiced)
+    // or when we just selected an answer (updating allUserAnswers)
+    if (
+      lastProcessedQuestionIdRef.current === question.id &&
+      lastModeRef.current === mode
+    ) {
+      return;
+    }
+
+    lastProcessedQuestionIdRef.current = question.id;
+    lastModeRef.current = mode;
+
     setNote(question?.note || "");
 
-    if (question?.isPracticed) {
-      setShowAnswer(true);
-      setIsSubmitted(true);
+    // Restore user answer if exists (from current session)
+    const savedAnswer = allUserAnswers[currentIndex];
+    if (savedAnswer) {
+      setSelectedAnswers(savedAnswer);
     } else {
-      // Restore user answer if exists
-      const savedAnswer = allUserAnswers[currentIndex];
-      if (savedAnswer) {
-        setSelectedAnswers(savedAnswer);
-        // In mock mode, we don't show answer immediately unless submitted
-        if (mode !== "mock") {
-          // Logic for non-mock mode restoration if needed
-        }
-      } else {
-        setSelectedAnswers([]);
-      }
+      setSelectedAnswers([]);
+    }
 
-      if (mode !== "mock") {
-        setShowAnswer(mode === "notes");
-        setIsSubmitted(false);
-      }
+    // Determine visibility based on mode
+    if (mode === "mock") {
+      setShowAnswer(false);
+      setIsSubmitted(false);
+    } else if (mode === "notes") {
+      setShowAnswer(true);
+      setIsSubmitted(false);
+    } else {
+      // Practice mode: Always hide answer initially to allow redo
+      // even if question.isPracticed is true
+      setShowAnswer(false);
+      setIsSubmitted(false);
     }
   }, [currentIndex, questions, allUserAnswers, mode]);
 
@@ -1070,6 +1093,7 @@ export function QuizView({
       id: number;
       isCorrect: boolean;
       isAnswered: boolean;
+      userAnswer: string;
     }[] = [];
 
     questions.forEach((q, index) => {
@@ -1096,37 +1120,52 @@ export function QuizView({
 
       if (isCorrect) correctCount++;
       score += points;
-      newResults.push({ id: q.id, isCorrect, isAnswered });
+      newResults.push({
+        id: q.id,
+        isCorrect,
+        isAnswered,
+        userAnswer: userAnsStr,
+      });
     });
 
     setMockScore(score);
     setResults(newResults);
     setShowSummary(true);
 
+    const answeredCount = newResults.filter((r) => r.isAnswered).length;
+
     // Prepare answers for submission
     const answersToSubmit = newResults.map((r) => ({
       questionId: r.id,
       isCorrect: r.isCorrect,
       isAnswered: r.isAnswered,
+      userAnswer: r.userAnswer,
     }));
 
     try {
-      await fetch("/api/mock-scores", {
+      const res = await fetch("/api/mock-scores", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           score,
           totalQuestions: questions.length,
           correctCount,
+          answeredCount,
           answers: answersToSubmit,
         }),
       });
+      const data = await res.json();
+      console.log("Mock submission result:", data);
+
+      if (!res.ok) throw new Error(data.error || "Failed to save");
+
       toast.success("成绩已保存");
       // Invalidate dashboard stats query to refresh homepage data
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to save score:", error);
-      toast.error("保存成绩失败");
+      const msg = error?.message || "保存成绩失败";
+      toast.error(msg);
     }
   };
 
@@ -1351,7 +1390,11 @@ export function QuizView({
 
   if (showSummary) {
     const correctCount = results.filter((r) => r.isCorrect).length;
-    const accuracy = Math.round((correctCount / results.length) * 100) || 0;
+    const answeredCount = results.filter((r) => r.isAnswered).length;
+    const incorrectCount = answeredCount - correctCount;
+    const unansweredCount = results.length - answeredCount;
+    const accuracy =
+      answeredCount > 0 ? Math.round((correctCount / answeredCount) * 100) : 0;
 
     return (
       <div className="flex flex-col h-screen bg-gray-50 p-4">
@@ -1370,17 +1413,29 @@ export function QuizView({
                 </div>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-8 w-full text-center">
-              <div>
-                <div className="text-gray-500">答对</div>
-                <div className="text-green-500 font-bold text-xl">
-                  {correctCount}
+            <div className="grid grid-cols-2 gap-4 w-full text-center text-sm">
+              <div className="bg-green-50 p-2 rounded">
+                <div className="text-gray-500">做对</div>
+                <div className="text-green-600 font-bold text-lg">
+                  {correctCount}题
                 </div>
               </div>
-              <div>
-                <div className="text-gray-500">答错</div>
-                <div className="text-red-500 font-bold text-xl">
-                  {results.length - correctCount}
+              <div className="bg-red-50 p-2 rounded">
+                <div className="text-gray-500">做错</div>
+                <div className="text-red-600 font-bold text-lg">
+                  {incorrectCount}题
+                </div>
+              </div>
+              <div className="bg-gray-100 p-2 rounded">
+                <div className="text-gray-500">未做</div>
+                <div className="text-gray-600 font-bold text-lg">
+                  {unansweredCount}题
+                </div>
+              </div>
+              <div className="bg-blue-50 p-2 rounded">
+                <div className="text-gray-500">正确率</div>
+                <div className="text-blue-600 font-bold text-lg">
+                  {accuracy}%
                 </div>
               </div>
             </div>
@@ -1519,7 +1574,7 @@ export function QuizView({
           {mode === "category" &&
             !(viewMode === "list" && detailIndex !== null) && (
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 className="px-2"
                 onClick={() => {

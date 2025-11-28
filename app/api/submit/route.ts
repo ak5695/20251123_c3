@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
       .update(userQuestionState)
       .set({
         wrongCount: isCorrect
-          ? existingState[0].wrongCount
+          ? 0 // Reset wrong count if answered correctly to remove from "Incorrect" category
           : existingState[0].wrongCount + 1,
         correctCount: isCorrect
           ? existingState[0].correctCount + 1

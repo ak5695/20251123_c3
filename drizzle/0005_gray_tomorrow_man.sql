@@ -1,0 +1,1 @@
+ALTER TABLE "mock_exam_scores" ADD COLUMN "answeredCount" integer DEFAULT 0 NOT NULL;

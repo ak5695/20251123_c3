@@ -12,6 +12,7 @@ interface MockScore {
   score: number;
   totalQuestions: number;
   correctCount: number;
+  answeredCount: number;
   createdAt: string;
 }
 
@@ -53,34 +54,63 @@ export default function MockScoresPage() {
         ) : scores.length === 0 ? (
           <div className="text-center py-8 text-gray-500">暂无模拟考试记录</div>
         ) : (
-          scores.map((score) => (
-            <Card key={score.id}>
-              <CardHeader className="pb-2">
-                <div className="flex justify-between items-center">
-                  <CardTitle className="text-base font-medium">
-                    {format(new Date(score.createdAt), "yyyy-MM-dd HH:mm")}
-                  </CardTitle>
-                  <div className="flex items-center text-orange-500">
-                    <Trophy className="w-4 h-4 mr-1" />
-                    <span className="font-bold text-lg">{score.score}分</span>
+          scores.map((score) => {
+            // Handle backward compatibility for old records where answeredCount might be 0
+            const answeredCount =
+              score.answeredCount > 0
+                ? score.answeredCount
+                : score.totalQuestions;
+            const incorrectCount = answeredCount - score.correctCount;
+            const unansweredCount = score.totalQuestions - answeredCount;
+            const accuracy =
+              answeredCount > 0
+                ? Math.round((score.correctCount / answeredCount) * 100)
+                : 0;
+
+            return (
+              <Card key={score.id}>
+                <CardHeader className="pb-2">
+                  <div className="flex justify-between items-center">
+                    <CardTitle className="text-base font-medium">
+                      {format(new Date(score.createdAt), "yyyy-MM-dd HH:mm")}
+                    </CardTitle>
+                    <div className="flex items-center text-orange-500">
+                      <Trophy className="w-4 h-4 mr-1" />
+                      <span className="font-bold text-lg">{score.score}分</span>
+                    </div>
                   </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex justify-between text-sm text-gray-500">
-                  <span>总题数: {score.totalQuestions}</span>
-                  <span>答对: {score.correctCount}</span>
-                  <span>
-                    正确率:{" "}
-                    {Math.round(
-                      (score.correctCount / score.totalQuestions) * 100
-                    )}
-                    %
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          ))
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-y-2 text-sm text-gray-600">
+                    <div className="flex justify-between pr-4">
+                      <span>做对:</span>
+                      <span className="font-medium text-green-600">
+                        {score.correctCount}题
+                      </span>
+                    </div>
+                    <div className="flex justify-between pl-4 border-l">
+                      <span>做错:</span>
+                      <span className="font-medium text-red-600">
+                        {incorrectCount}题
+                      </span>
+                    </div>
+                    <div className="flex justify-between pr-4">
+                      <span>未做:</span>
+                      <span className="font-medium text-gray-500">
+                        {unansweredCount}题
+                      </span>
+                    </div>
+                    <div className="flex justify-between pl-4 border-l">
+                      <span>正确率:</span>
+                      <span className="font-bold text-blue-600">
+                        {accuracy}%
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })
         )}
       </main>
     </div>
