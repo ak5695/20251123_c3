@@ -495,13 +495,7 @@ export default function Dashboard() {
               会员专享功能
             </DialogTitle>
             <DialogDescription className="pt-2 text-base">
-              该功能仅限会员使用。升级会员即可解锁：
-              <ul className="mt-2 space-y-1 text-sm text-gray-600 list-disc list-inside">
-                <li>全真模拟考试系统</li>
-                <li>历次模拟成绩分析</li>
-                <li>个人错题/笔记云同步</li>
-                <li>考前押题密卷</li>
-              </ul>
+              该功能仅限会员使用。升级会员即可解锁.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex-col sm:flex-row gap-2 mt-4">

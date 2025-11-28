@@ -33,6 +33,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { authClient } from "@/lib/auth-client";
 
 import {
   Sheet,
@@ -123,6 +124,8 @@ export function QuizView({
   isPaid = false,
 }: QuizViewProps) {
   const router = useRouter();
+  const { data: session, isPending: isSessionPending } =
+    authClient.useSession();
   const queryClient = useQueryClient();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -149,7 +152,10 @@ export function QuizView({
 
   // 位置记录相关 - 重新设计
   const getPositionKey = () => {
-    return `quiz-position-${mode}-${category || "all"}-${filterType || "all"}`;
+    const userId = session?.user?.id || "guest";
+    return `quiz-position-${userId}-${mode}-${category || "all"}-${
+      filterType || "all"
+    }`;
   };
 
   const scrollContainerRef = useRef<HTMLElement | null>(null);
@@ -753,6 +759,12 @@ export function QuizView({
       viewMode === "card" && mode === "category" ? "card-practiced" : "normal",
     ],
     queryFn: async () => {
+      // Check for free user limit in list mode
+      if (!isPaid && viewMode === "list" && offset >= 50) {
+        setShowSubscriptionDialog(true);
+        return { data: [], total: 50 }; // Return empty to stop loading
+      }
+
       let url = `/api/questions?mode=${mode}&offset=${offset}`;
 
       if (quizParams) {
@@ -839,6 +851,8 @@ export function QuizView({
 
   // 位置恢复 - 只在进入list模式且第一次加载时执行
   useEffect(() => {
+    if (isSessionPending) return;
+
     if (viewMode === "list" && !isCheckingResume) {
       const currentKey = getPositionKey();
 
@@ -872,7 +886,14 @@ export function QuizView({
         }
       }
     }
-  }, [viewMode, mode, category, filterType]);
+  }, [
+    viewMode,
+    mode,
+    category,
+    filterType,
+    isSessionPending,
+    session?.user?.id,
+  ]);
 
   // 在questions加载完成后滚动到保存的题目位置
   useEffect(() => {
@@ -1332,6 +1353,29 @@ export function QuizView({
       setShowSubscriptionDialog(true);
     }
   }, [mode, isPaid]);
+
+  // Handle subscription dialog close for gated features
+  const handleSubscriptionDialogChange = (open: boolean) => {
+    setShowSubscriptionDialog(open);
+    if (!open && !isPaid) {
+      // If user closes dialog without paying, and they are in a restricted mode, redirect home
+      if (mode === "mock" || mode === "notes") {
+        router.push("/");
+      }
+      // If user closes dialog in list mode and has reached the limit, prevent closing or redirect
+      if (viewMode === "list" && offset >= 50) {
+        // Option 1: Redirect to home
+        // router.push("/");
+        // Option 2: Re-open dialog (force them to pay or leave)
+        // But re-opening immediately might be annoying if they want to leave.
+        // Let's redirect to category page (or home if no category) to be safe.
+        // Or just keep it open?
+        // The user said "should be limited... not continue".
+        // If we redirect, they can't continue.
+        router.push("/");
+      }
+    }
+  };
 
   if (isCheckingResume) {
     return (
@@ -2380,7 +2424,7 @@ export function QuizView({
 
       <Dialog
         open={showSubscriptionDialog}
-        onOpenChange={setShowSubscriptionDialog}
+        onOpenChange={handleSubscriptionDialogChange}
       >
         <DialogContent>
           <DialogHeader>
@@ -2402,7 +2446,7 @@ export function QuizView({
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setShowSubscriptionDialog(false)}
+              onClick={() => handleSubscriptionDialogChange(false)}
             >
               取消
             </Button>

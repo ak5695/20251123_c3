@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { authClient } from "@/lib/auth-client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 interface Note {
   id: number;
@@ -22,27 +24,37 @@ interface Note {
 
 export default function NotesPage() {
   const router = useRouter();
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const queryClient = useQueryClient();
+  const { data: session } = authClient.useSession();
+
+  const { data: userProfile } = useQuery({
+    queryKey: ["user-profile", session?.user?.id],
+    queryFn: async () => {
+      const res = await fetch("/api/user/profile");
+      if (!res.ok) throw new Error("Failed to fetch profile");
+      return res.json();
+    },
+    enabled: !!session,
+  });
 
   useEffect(() => {
-    fetchNotes();
-  }, []);
-
-  const fetchNotes = async () => {
-    try {
-      const res = await fetch("/api/notes");
-      if (res.ok) {
-        const data = await res.json();
-        setNotes(data);
-      }
-    } catch (error) {
-      console.error("Failed to fetch notes", error);
-    } finally {
-      setLoading(false);
+    if (userProfile && !userProfile.isPaid) {
+      toast.error("请先开通会员");
+      router.push("/");
     }
-  };
+  }, [userProfile, router]);
+
+  const { data: notes = [], isLoading: loading } = useQuery({
+    queryKey: ["notes", session?.user?.id],
+    queryFn: async () => {
+      const res = await fetch("/api/notes");
+      if (!res.ok) throw new Error("Failed to fetch notes");
+      return res.json() as Promise<Note[]>;
+    },
+    enabled: !!session,
+  });
+
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const handleDeleteNote = async (e: React.MouseEvent, id: number) => {
     e.stopPropagation(); // Prevent card click
@@ -57,7 +69,8 @@ export default function NotesPage() {
           note: null,
         }),
       });
-      setNotes((prev) => prev.filter((n) => n.id !== id));
+      // Invalidate queries to refresh list
+      queryClient.invalidateQueries({ queryKey: ["notes"] });
       toast.success("笔记已删除");
     } catch (error) {
       toast.error("删除失败");

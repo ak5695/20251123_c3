@@ -15,7 +15,7 @@ function CategoryContent() {
   const { data: session } = authClient.useSession();
 
   const { data: userProfile } = useQuery({
-    queryKey: ["user-profile"],
+    queryKey: ["user-profile", session?.user?.id],
     queryFn: async () => {
       const res = await fetch("/api/user/profile");
       if (!res.ok) throw new Error("Failed to fetch profile");
