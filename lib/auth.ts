@@ -18,7 +18,10 @@ export const auth = betterAuth({
   emailVerification: {
     enabled: true,
     sendOnSignUp: true,
-    sendVerificationEmail: async ({ user, url, token }: { user: User, url: string, token: string }, request?: Request) => {
+    sendVerificationEmail: async (
+      { user, url, token }: { user: User; url: string; token: string },
+      request?: Request
+    ) => {
       await resend.emails.send({
         from: "广东C3安考宝典 <noreply@c3.dufran.cn>",
         to: user.email,
@@ -29,7 +32,10 @@ export const auth = betterAuth({
   },
   passwordReset: {
     enabled: true,
-    sendResetPasswordEmail: async ({ user, url, token }: { user: User, url: string, token: string }, request?: Request) => {
+    sendResetPasswordEmail: async (
+      { user, url, token }: { user: User; url: string; token: string },
+      request?: Request
+    ) => {
       await resend.emails.send({
         from: "广东C3安考宝典 <noreply@c3.dufran.cn>",
         to: user.email,
