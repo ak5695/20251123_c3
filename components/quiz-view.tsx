@@ -2146,7 +2146,7 @@ export function QuizView({
                   </div>
                   <div className="mt-4 flex gap-4 justify-center text-xs text-gray-500">
                     <div className="flex items-center gap-1">
-                                           <div className="w-3 h-3 rounded-full bg-gray-100 border border-gray-300"></div>
+                      <div className="w-3 h-3 rounded-full bg-gray-100 border border-gray-300"></div>
                       未做
                     </div>
                     <div className="flex items-center gap-1">
