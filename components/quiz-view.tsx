@@ -458,6 +458,7 @@ export function QuizView({
         throw new Error("Failed to update collection");
       }
       // toast.success(newIsCollected ? "已收藏" : "已取消收藏");
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
     } catch (error) {
       console.error("Toggle collection error:", error);
       toast.error("操作失败");
@@ -514,6 +515,7 @@ export function QuizView({
         throw new Error("Failed to update recited status");
       }
       // toast.success(newIsRecited ? "已标记背诵" : "已取消背诵");
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
     } catch (error) {
       console.error("Toggle recited error:", error);
       toast.error("操作失败");
@@ -984,6 +986,7 @@ export function QuizView({
   const handleOptionSelect = (value: string) => {
     if (isSubmitted && mode !== "mock") return; // Allow changing answer in mock mode before submission
 
+    vibrate();
     let newAnswers: string[];
     if (currentQuestion.type === "MULTIPLE") {
       newAnswers = selectedAnswers.includes(value)
@@ -1059,6 +1062,7 @@ export function QuizView({
   };
 
   const handleMockSubmit = async () => {
+    vibrate();
     clearMockProgress();
     let score = 0;
     let correctCount = 0;
@@ -1094,6 +1098,12 @@ export function QuizView({
     setResults(newResults);
     setShowSummary(true);
 
+    // Prepare answers for submission
+    const answersToSubmit = newResults.map((r) => ({
+      questionId: r.id,
+      isCorrect: r.isCorrect,
+    }));
+
     try {
       await fetch("/api/mock-scores", {
         method: "POST",
@@ -1102,9 +1112,12 @@ export function QuizView({
           score,
           totalQuestions: questions.length,
           correctCount,
+          answers: answersToSubmit,
         }),
       });
       toast.success("成绩已保存");
+      // Invalidate dashboard stats query to refresh homepage data
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
     } catch (error) {
       console.error("Failed to save score:", error);
       toast.error("保存成绩失败");
@@ -1114,6 +1127,7 @@ export function QuizView({
   const handleSubmit = async () => {
     if (selectedAnswers.length === 0) return;
 
+    vibrate();
     setIsSubmitted(true);
     setShowAnswer(true);
 
@@ -1139,12 +1153,15 @@ export function QuizView({
           isCorrect,
         }),
       });
+      // Invalidate dashboard stats to update homepage immediately
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
     } catch (error) {
       console.error("Failed to submit answer");
     }
   };
 
   const handleNext = () => {
+    vibrate();
     if (currentIndex < questions.length - 1) {
       setCurrentIndex((prev) => prev + 1);
       // selectedAnswers will be updated by useEffect
@@ -1163,6 +1180,7 @@ export function QuizView({
   };
 
   const handlePrev = () => {
+    vibrate();
     if (currentIndex > 0) {
       setCurrentIndex((prev) => prev - 1);
       // selectedAnswers will be updated by useEffect
@@ -2108,8 +2126,13 @@ export function QuizView({
                   </SheetHeader>
                   <div className="mt-6 grid grid-cols-6 gap-4 overflow-y-auto max-h-[60vh] p-2">
                     {questions.map((q, index) => {
+                      const hasUserAnswer =
+                        allUserAnswers[index] &&
+                        allUserAnswers[index].length > 0;
                       const isAnswered =
-                        answeredQuestions.hasOwnProperty(index);
+                        mode === "mock"
+                          ? hasUserAnswer
+                          : answeredQuestions.hasOwnProperty(index);
                       const isCorrect = answeredQuestions[index];
                       const isCurrent = currentIndex === index;
 
@@ -2117,9 +2140,25 @@ export function QuizView({
                       if (isCurrent) {
                         bgClass = "bg-blue-500 text-white ring-2 ring-blue-300";
                       } else if (isAnswered) {
-                        bgClass = isCorrect
-                          ? "bg-green-100 text-green-600 border border-green-500"
-                          : "bg-red-100 text-red-600 border border-red-500";
+                        if (mode === "mock") {
+                          // In mock mode, just show as answered (blue/gray) until submitted
+                          // If submitted (showSummary is true), we could show correct/incorrect if we had that data mapped
+                          // But currently answeredQuestions is not populated in mock mode until we might want to?
+                          // Actually, let's check if we have results
+                          const result = results.find((r) => r.id === q.id);
+                          if (showSummary && result) {
+                            bgClass = result.isCorrect
+                              ? "bg-green-100 text-green-600 border border-green-500"
+                              : "bg-red-100 text-red-600 border border-red-500";
+                          } else {
+                            bgClass =
+                              "bg-blue-50 text-blue-600 border border-blue-200";
+                          }
+                        } else {
+                          bgClass = isCorrect
+                            ? "bg-green-100 text-green-600 border border-green-500"
+                            : "bg-red-100 text-red-600 border border-red-500";
+                        }
                       }
 
                       return (

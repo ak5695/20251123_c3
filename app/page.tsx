@@ -2,7 +2,7 @@
 
 import { authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,6 +33,15 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { vibrate } from "@/lib/utils";
 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+
 interface CategoryStats {
   category: string;
   total: number;
@@ -56,6 +65,7 @@ interface UserProfile {
 export default function Dashboard() {
   const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
+  const [showSubscriptionDialog, setShowSubscriptionDialog] = useState(false);
 
   const { data: userProfile, isLoading: isProfileLoading } =
     useQuery<UserProfile>({
@@ -187,6 +197,15 @@ export default function Dashboard() {
     .toUpperCase();
   const isPaid = userProfile?.isPaid || false;
 
+  const handleRestrictedAction = (href: string) => {
+    vibrate();
+    if (!isPaid) {
+      setShowSubscriptionDialog(true);
+    } else {
+      router.push(href);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       <header className="bg-white p-3 shadow-sm sticky top-0 z-10 flex justify-between items-center">
@@ -294,7 +313,7 @@ export default function Dashboard() {
             <Card
               key={action.label}
               className="cursor-pointer hover:shadow-md transition-all active:scale-90 border-none shadow-sm py-2"
-              onClick={() => router.push(action.href)}
+              onClick={() => handleRestrictedAction(action.href)}
             >
               <CardContent className="flex flex-col items-center justify-center p-0 gap-2">
                 <div className={`p-2 rounded-full ${action.bg}`}>
@@ -464,6 +483,47 @@ export default function Dashboard() {
           </div>
         </footer>
       </main>
+
+      <Dialog
+        open={showSubscriptionDialog}
+        onOpenChange={setShowSubscriptionDialog}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl text-yellow-600">
+              <Crown className="w-6 h-6" />
+              会员专享功能
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-base">
+              该功能仅限会员使用。升级会员即可解锁：
+              <ul className="mt-2 space-y-1 text-sm text-gray-600 list-disc list-inside">
+                <li>全真模拟考试系统</li>
+                <li>历次模拟成绩分析</li>
+                <li>个人错题/笔记云同步</li>
+                <li>考前押题密卷</li>
+              </ul>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col sm:flex-row gap-2 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setShowSubscriptionDialog(false)}
+              className="w-full sm:w-auto"
+            >
+              暂不需要
+            </Button>
+            <Button
+              onClick={() => {
+                setShowSubscriptionDialog(false);
+                handleSubscribe();
+              }}
+              className="w-full sm:w-auto bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white border-none"
+            >
+              立即升级
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
