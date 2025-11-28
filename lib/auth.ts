@@ -2,6 +2,9 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "./db"; // Adjust path if needed
 import * as schema from "./db/schema";
+import { Resend } from "resend";
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -10,6 +13,30 @@ export const auth = betterAuth({
   }),
   emailAndPassword: {
     enabled: true,
+    requireEmailVerification: true,
+  },
+  emailVerification: {
+    enabled: true,
+    sendOnSignUp: true,
+    sendVerificationEmail: async ({ user, url, token }, request) => {
+      await resend.emails.send({
+        from: "广东C3安考宝典 <noreply@c3.dufran.cn>",
+        to: user.email,
+        subject: "验证您的邮箱",
+        html: `<p>请点击以下链接验证您的邮箱：<a href="${url}">${url}</a></p>`,
+      });
+    },
+  },
+  passwordReset: {
+    enabled: true,
+    sendResetPasswordEmail: async ({ user, url, token }, request) => {
+      await resend.emails.send({
+        from: "广东C3安考宝典 <noreply@c3.dufran.cn>",
+        to: user.email,
+        subject: "重置您的密码",
+        html: `<p>请点击以下链接重置您的密码：<a href="${url}">${url}</a></p>`,
+      });
+    },
   },
   trustedOrigins: [
     "https://c3.dufran.cn",
