@@ -3,9 +3,12 @@ import { Resend } from "resend";
 
 export async function GET() {
   const apiKey = process.env.RESEND_API_KEY;
-  
+
   if (!apiKey) {
-    return NextResponse.json({ error: "RESEND_API_KEY is missing" }, { status: 500 });
+    return NextResponse.json(
+      { error: "RESEND_API_KEY is missing" },
+      { status: 500 }
+    );
   }
 
   const resend = new Resend(apiKey);
@@ -24,6 +27,9 @@ export async function GET() {
 
     return NextResponse.json({ data });
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : "Unknown error" }, { status: 500 });
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Unknown error" },
+      { status: 500 }
+    );
   }
 }
