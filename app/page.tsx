@@ -31,6 +31,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import { vibrate } from "@/lib/utils";
 
 interface CategoryStats {
   category: string;
@@ -146,7 +147,10 @@ export default function Dashboard() {
     onClick: () => void;
   }) => (
     <button
-      onClick={onClick}
+      onClick={() => {
+        vibrate();
+        onClick();
+      }}
       className={`cursor-pointer flex flex-col items-center justify-center p-1 rounded hover:bg-gray-50 transition-all active:scale-90 w-full ${bgColor} bg-opacity-20 hover:bg-opacity-30`}
     >
       <span className={`text-sm font-bold ${color}`}>{value}</span>
