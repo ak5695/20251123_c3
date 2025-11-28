@@ -77,6 +77,7 @@ export default function Dashboard() {
       return res.json();
     },
     enabled: !!session,
+    refetchOnMount: "always",
   });
 
   useEffect(() => {
