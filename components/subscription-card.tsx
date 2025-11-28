@@ -54,7 +54,7 @@ export function SubscriptionCard() {
     setLoading(true);
     try {
       // 创建 checkout session
-      const response = await fetch("/api/create-checkout-session", {
+      const response = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -62,13 +62,18 @@ export function SubscriptionCard() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to create checkout session");
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to create checkout session");
       }
 
-      const { sessionId } = await response.json();
+      const { url } = await response.json();
 
       // 重定向到 Stripe Checkout URL
-      window.location.href = `https://checkout.stripe.com/c/pay/${sessionId}`;
+      if (url) {
+        window.location.href = url;
+      } else {
+        throw new Error("No checkout URL returned");
+      }
     } catch (error) {
       console.error("Error:", error);
       toast.error("支付初始化失败，请重试");

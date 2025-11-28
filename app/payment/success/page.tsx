@@ -9,9 +9,9 @@ import Image from "next/image";
 function SuccessContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [status, setStatus] = useState<"verifying" | "success" | "timeout">(
-    "verifying"
-  );
+  const [status, setStatus] = useState<
+    "verifying" | "success" | "timeout" | "unauthorized"
+  >("verifying");
   const sessionId = searchParams.get("session_id");
 
   useEffect(() => {
@@ -22,6 +22,13 @@ function SuccessContent() {
     const checkStatus = async () => {
       try {
         const res = await fetch("/api/subscription-status");
+
+        if (res.status === 401) {
+          setStatus("unauthorized");
+          clearInterval(intervalId);
+          return;
+        }
+
         if (res.ok) {
           const data = await res.json();
           if (data.isPaid) {
@@ -79,7 +86,11 @@ function SuccessContent() {
               status === "success" ? "text-green-600" : "text-orange-600"
             }`}
           >
-            {status === "success" ? "支付成功！" : "支付处理中"}
+            {status === "success"
+              ? "支付成功！"
+              : status === "unauthorized"
+              ? "需要登录"
+              : "支付处理中"}
           </CardTitle>
         </CardHeader>
         <CardContent className="text-center">
@@ -94,25 +105,37 @@ function SuccessContent() {
             <p className="text-gray-600 mb-2">
               {status === "success"
                 ? "恭喜您成功开通会员"
+                : status === "unauthorized"
+                ? "支付可能已成功，但您需要登录才能查看状态"
                 : "我们已收到您的支付请求，系统正在处理中"}
             </p>
             <p className="text-sm text-gray-500">
               {status === "success"
                 ? "现在您可以享受所有高级功能了！"
+                : status === "unauthorized"
+                ? "请点击下方按钮登录"
                 : "请稍后在会员中心查看状态，通常会在几分钟内完成。"}
             </p>
           </div>
 
           <div className="space-y-3">
             <Button
-              onClick={() => router.push("/")}
+              onClick={() =>
+                status === "unauthorized"
+                  ? router.push("/sign-in")
+                  : router.push("/")
+              }
               className={`w-full ${
                 status === "success"
                   ? "bg-green-600 hover:bg-green-700"
                   : "bg-orange-600 hover:bg-orange-700"
               }`}
             >
-              {status === "success" ? "开始学习" : "返回首页"}
+              {status === "success"
+                ? "开始学习"
+                : status === "unauthorized"
+                ? "去登录"
+                : "返回首页"}
             </Button>
             <Button
               variant="outline"
