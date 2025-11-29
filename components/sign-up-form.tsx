@@ -28,7 +28,7 @@ export function SignUpForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password.length < 8) {
-      toast.error("Password must be at least 8 characters long");
+      toast.error("密码必须是至少8个字符");
       return;
     }
     setLoading(true);

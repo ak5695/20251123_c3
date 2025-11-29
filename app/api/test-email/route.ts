@@ -17,8 +17,8 @@ export async function GET() {
     const { data, error } = await resend.emails.send({
       from: "广东C3安考宝典 <noreply@c3.dufran.cn>",
       to: "delivered@resend.dev", // Test address
-      subject: "Test Email",
-      html: "<p>It works!</p>",
+      subject: "Test Email from Verified Domain",
+      html: "<p>It works with the verified domain!</p>",
     });
 
     if (error) {
