@@ -1319,6 +1319,10 @@ export function QuizView({
   }, [loading, isQueryLoading, isFetching, questions.length]);
 
   const handleSubscribe = async () => {
+    if (!session) {
+      router.push("/sign-in");
+      return;
+    }
     setIsCheckingSubscription(true);
     try {
       const res = await fetch("/api/stripe/checkout", {

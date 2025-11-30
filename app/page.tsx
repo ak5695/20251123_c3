@@ -33,6 +33,7 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { vibrate } from "@/lib/utils";
 
+import Link from "next/link";
 import {
   Dialog,
   DialogContent,
@@ -92,9 +93,7 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
-    if (!isPending && !session) {
-      router.push("/sign-in");
-    }
+    // Removed redirect to allow guest access
   }, [session, isPending, router]);
 
   const handleSignOut = async () => {
@@ -122,6 +121,10 @@ export default function Dashboard() {
   };
 
   const navigateToQuiz = (category: string, filterType: string) => {
+    if (!session) {
+      router.push("/sign-in");
+      return;
+    }
     const params = new URLSearchParams();
     if (category !== "全部") {
       params.set("category", category);
@@ -138,10 +141,25 @@ export default function Dashboard() {
     );
   }
 
-  if (!session) return null;
+  // if (!session) return null; // Removed to allow guest access
 
-  const allStats = stats.find((s) => s.category === "全部");
-  const categoryStats = stats.filter((s) => s.category !== "全部");
+  const defaultStats: CategoryStats[] = [
+    {
+      category: "全部",
+      total: 0,
+      unanswered: 0,
+      correct: 0,
+      incorrect: 0,
+      collected: 0,
+      viewed: 0,
+      unviewed: 0,
+    },
+  ];
+
+  const displayStats = session ? stats : defaultStats;
+  const allStats =
+    displayStats.find((s) => s.category === "全部") || defaultStats[0];
+  const categoryStats = displayStats.filter((s) => s.category !== "全部");
 
   const StatButton = ({
     label,
@@ -192,13 +210,17 @@ export default function Dashboard() {
     },
   ];
 
-  const userInitial = (session.user.name || session.user.email || "U")
-    .charAt(0)
-    .toUpperCase();
+  const userInitial = session?.user
+    ? (session.user.name || session.user.email || "U").charAt(0).toUpperCase()
+    : "G";
   const isPaid = userProfile?.isPaid || false;
 
   const handleRestrictedAction = (href: string) => {
     vibrate();
+    if (!session) {
+      router.push("/sign-in");
+      return;
+    }
     if (!isPaid) {
       setShowSubscriptionDialog(true);
     } else {
@@ -222,87 +244,95 @@ export default function Dashboard() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Popover>
-            <PopoverTrigger asChild>
-              <div className="flex items-center gap-2 cursor-pointer">
-                <div className="relative">
-                  <Avatar className="h-9 w-9 border-2 border-white shadow-sm">
-                    <AvatarImage src={session.user.image || ""} />
-                    <AvatarFallback className="bg-primary/10 text-primary font-bold">
-                      {userInitial}
-                    </AvatarFallback>
-                  </Avatar>
-                  {isPaid && (
-                    <div className="absolute -bottom-1 -right-1 bg-yellow-400 rounded-full p-0.5 border-2 border-white">
-                      <Crown className="w-3 h-3 text-white fill-white" />
-                    </div>
-                  )}
-                </div>
-              </div>
-            </PopoverTrigger>
-            <PopoverContent className="w-64 p-0" align="end">
-              <div className="p-4 flex flex-col items-center gap-3 bg-gradient-to-b from-gray-50 to-white">
-                <Avatar className="h-16 w-16 border-4 border-white shadow-md">
-                  <AvatarImage src={session.user.image || ""} />
-                  <AvatarFallback className="bg-primary/10 text-primary text-2xl font-bold">
-                    {userInitial}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="text-center">
-                  <div className="font-bold text-lg truncate max-w-[200px]">
-                    {session.user.name || "用户"}
-                  </div>
-                  <div className="text-xs text-gray-500 truncate max-w-[200px]">
-                    {session.user.email}
-                  </div>
-                </div>
-
-                {isPaid ? (
-                  <div className="flex flex-col items-center gap-1 bg-yellow-50 px-4 py-2 rounded-full border border-yellow-100">
-                    <div className="flex items-center gap-1 text-yellow-700 font-bold text-sm">
-                      <Crown className="w-4 h-4 fill-yellow-700" />
-                      <span>尊贵会员</span>
-                    </div>
-                    {userProfile?.subscriptionExpiresAt && (
-                      <div className="text-[10px] text-yellow-600/80">
-                        到期:{" "}
-                        {new Date(
-                          userProfile.subscriptionExpiresAt
-                        ).toLocaleDateString()}
+          {session ? (
+            <Popover>
+              <PopoverTrigger asChild>
+                <div className="flex items-center gap-2 cursor-pointer">
+                  <div className="relative">
+                    <Avatar className="h-9 w-9 border-2 border-white shadow-sm">
+                      <AvatarImage src={session.user.image || ""} />
+                      <AvatarFallback className="bg-primary/10 text-primary font-bold">
+                        {userInitial}
+                      </AvatarFallback>
+                    </Avatar>
+                    {isPaid && (
+                      <div className="absolute -bottom-1 -right-1 bg-yellow-400 rounded-full p-0.5 border-2 border-white">
+                        <Crown className="w-3 h-3 text-white fill-white" />
                       </div>
                     )}
                   </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-2 w-full">
-                    <div className="text-xs text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-                      普通用户
+                </div>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-0" align="end">
+                <div className="p-4 flex flex-col items-center gap-3 bg-gradient-to-b from-gray-50 to-white">
+                  <Avatar className="h-16 w-16 border-4 border-white shadow-md">
+                    <AvatarImage src={session.user.image || ""} />
+                    <AvatarFallback className="bg-primary/10 text-primary text-2xl font-bold">
+                      {userInitial}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="text-center">
+                    <div className="font-bold text-lg truncate max-w-[200px]">
+                      {session.user.name || "用户"}
                     </div>
-                    <Button
-                      size="sm"
-                      className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white border-none shadow-md"
-                      onClick={handleSubscribe}
-                    >
-                      <Crown className="w-4 h-4 mr-1" />
-                      升级会员
-                    </Button>
+                    <div className="text-xs text-gray-500 truncate max-w-[200px]">
+                      {session.user.email}
+                    </div>
                   </div>
-                )}
-              </div>
 
-              <Separator />
+                  {isPaid ? (
+                    <div className="flex flex-col items-center gap-1 bg-yellow-50 px-4 py-2 rounded-full border border-yellow-100">
+                      <div className="flex items-center gap-1 text-yellow-700 font-bold text-sm">
+                        <Crown className="w-4 h-4 fill-yellow-700" />
+                        <span>尊贵会员</span>
+                      </div>
+                      {userProfile?.subscriptionExpiresAt && (
+                        <div className="text-[10px] text-yellow-600/80">
+                          到期:{" "}
+                          {new Date(
+                            userProfile.subscriptionExpiresAt
+                          ).toLocaleDateString()}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2 w-full">
+                      <div className="text-xs text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                        普通用户
+                      </div>
+                      <Button
+                        size="sm"
+                        className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white border-none shadow-md"
+                        onClick={handleSubscribe}
+                      >
+                        <Crown className="w-4 h-4 mr-1" />
+                        升级会员
+                      </Button>
+                    </div>
+                  )}
+                </div>
 
-              <div className="p-2">
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
-                  onClick={handleSignOut}
-                >
-                  <LogOut className="w-4 h-4 mr-2" />
-                  退出登录
-                </Button>
-              </div>
-            </PopoverContent>
-          </Popover>
+                <Separator />
+
+                <div className="p-2">
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
+                    onClick={handleSignOut}
+                  >
+                    <LogOut className="w-4 h-4 mr-2" />
+                    退出登录
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
+          ) : (
+            <Link href="/sign-in">
+              <Button size="sm" variant="default">
+                登录 / 注册
+              </Button>
+            </Link>
+          )}
         </div>
       </header>
 
