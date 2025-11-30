@@ -88,7 +88,7 @@ export default function Dashboard() {
       if (!res.ok) throw new Error("Failed to fetch stats");
       return res.json();
     },
-    enabled: !!session,
+    // enabled: !!session, // Removed to allow fetching stats for guests
     refetchOnMount: "always",
   });
 
@@ -121,10 +121,10 @@ export default function Dashboard() {
   };
 
   const navigateToQuiz = (category: string, filterType: string) => {
-    if (!session) {
-      router.push("/sign-in");
-      return;
-    }
+    // if (!session) {
+    //   router.push("/sign-in");
+    //   return;
+    // }
     const params = new URLSearchParams();
     if (category !== "全部") {
       params.set("category", category);
@@ -133,7 +133,7 @@ export default function Dashboard() {
     router.push(`/quiz/category?${params.toString()}`);
   };
 
-  if (isPending || (session && isStatsLoading)) {
+  if (isPending || isStatsLoading) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -156,7 +156,7 @@ export default function Dashboard() {
     },
   ];
 
-  const displayStats = session ? stats : defaultStats;
+  const displayStats = stats.length > 0 ? stats : defaultStats;
   const allStats =
     displayStats.find((s) => s.category === "全部") || defaultStats[0];
   const categoryStats = displayStats.filter((s) => s.category !== "全部");
