@@ -129,6 +129,7 @@ export async function GET(req: NextRequest) {
       isRecited: userQuestionState.isRecited,
       note: userQuestionState.note,
       isPracticed: sql<boolean>`COALESCE(${userQuestionState.correctCount}, 0) > 0 OR COALESCE(${userQuestionState.wrongCount}, 0) > 0`,
+      wrongCount: sql<number>`COALESCE(${userQuestionState.wrongCount}, 0)::int`,
     })
     .from(questions)
     .leftJoin(
@@ -269,6 +270,13 @@ export async function GET(req: NextRequest) {
     if (random) {
       // @ts-ignore
       query = query.orderBy(sql`RANDOM()`);
+    } else if (filterType === "incorrect") {
+      // Sort by wrongCount descending for incorrect questions
+      // @ts-ignore
+      query = query.orderBy(
+        desc(sql`COALESCE(${userQuestionState.wrongCount}, 0)`),
+        questions.id
+      );
     } else {
       // @ts-ignore
       query = query.orderBy(questions.id);

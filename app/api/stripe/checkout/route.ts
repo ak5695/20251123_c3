@@ -49,7 +49,7 @@ export async function POST(req: Request) {
                 name: "2个月会员订阅",
                 description: "解锁所有题目和高级功能",
               },
-              unit_amount: 990, // 9.90 CNY
+              unit_amount: 1280, // 12.80 CNY
             },
             quantity: 1,
           },

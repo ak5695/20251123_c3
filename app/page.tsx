@@ -19,6 +19,7 @@ import {
   PenTool,
   Crown,
   User,
+  CalendarDays,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import Image from "next/image";
@@ -208,6 +209,13 @@ export default function Dashboard() {
       bg: "bg-orange-100",
       href: "/notes",
     },
+    {
+      label: "每日统计",
+      icon: CalendarDays,
+      color: "text-teal-500",
+      bg: "bg-teal-100",
+      href: "/daily-stats",
+    },
   ];
 
   const userInitial = session?.user
@@ -338,7 +346,7 @@ export default function Dashboard() {
 
       <main className="p-2 space-y-2">
         {/* Top Actions */}
-        <div className="grid grid-cols-3 gap-2 mb-2">
+        <div className="grid grid-cols-4 gap-2 mb-2">
           {topActions.map((action) => (
             <Card
               key={action.label}

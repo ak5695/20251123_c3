@@ -87,6 +87,7 @@ interface Question {
   status?: "unanswered" | "correct" | "incorrect";
   isRecited?: boolean;
   lastAnswered?: string; // 用户上次答案
+  wrongCount?: number; // 做错次数
 }
 
 interface QuizViewProps {
@@ -1710,6 +1711,14 @@ export function QuizView({
                           ? "多选"
                           : "判断"}
                       </span>
+                      {/* 错误次数标签 - 仅在错题模式下显示 */}
+                      {filterType === "incorrect" &&
+                        q.wrongCount &&
+                        q.wrongCount > 0 && (
+                          <span className="mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-500 border border-red-200">
+                            错{q.wrongCount}次
+                          </span>
+                        )}
                     </div>
                     <div className="flex-1">
                       {/* 做题状态标签区域 */}
@@ -2434,7 +2443,7 @@ export function QuizView({
           <DialogHeader>
             <DialogTitle>开通会员</DialogTitle>
             <DialogDescription>
-              解锁所有题目和高级功能，仅需 9.9 元/2个月
+              解锁所有题目和高级功能，仅需 12.8 元/2个月
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -2455,7 +2464,7 @@ export function QuizView({
               取消
             </Button>
             <Button onClick={handleSubscribe} disabled={isCheckingSubscription}>
-              {isCheckingSubscription ? "处理中..." : "立即开通 (¥9.9)"}
+              {isCheckingSubscription ? "处理中..." : "立即开通 (¥12.8)"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -177,7 +177,9 @@ export function SubscriptionCard() {
             </div>
 
             <div className="text-center">
-              <div className="text-3xl font-bold text-blue-600 mb-1">￥9.9</div>
+              <div className="text-3xl font-bold text-blue-600 mb-1">
+                ￥12.8
+              </div>
               <div className="text-sm text-gray-500">
                 两月会员 / 2个月有效期
               </div>

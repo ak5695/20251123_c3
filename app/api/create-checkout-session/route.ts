@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
               name: "C3安考宝典 - 两月会员",
               description: "2个月完整功能访问权限",
             },
-            unit_amount: 990, // 9.9元 = 990分
+            unit_amount: 1280, // 12.8元 = 1280分
           },
           quantity: 1,
         },

@@ -66,12 +66,12 @@ export default function TermsPage() {
                   <strong>3.1 服务内容</strong>
                 </p>
                 <ul className="list-disc list-inside ml-4 space-y-1">
-              <li>解锁所有2965道官方最新题库</li>
-              <li>无限制查看答案解析</li>
-              <li>无限制查看记忆方法</li>
-              <li>专属错题本和收藏夹</li>
-              <li>标注已浏览的题目</li>
-              <li>模拟考试功能</li>
+                  <li>解锁所有2965道官方最新题库</li>
+                  <li>无限制查看答案解析</li>
+                  <li>无限制查看记忆方法</li>
+                  <li>专属错题本和收藏夹</li>
+                  <li>标注已浏览的题目</li>
+                  <li>模拟考试功能</li>
                 </ul>
 
                 <p className="mt-4">
@@ -166,7 +166,7 @@ export default function TermsPage() {
                   <strong>7.2 价格政策</strong>
                 </p>
                 <ul className="list-disc list-inside ml-4 space-y-1">
-                  <li>当前价格：两个月会员9.9元人民币</li>
+                  <li>当前价格：两个月会员12.8元人民币</li>
                   <li>价格可能根据市场情况调整</li>
                   <li>已购买的会员不受价格调整影响</li>
                 </ul>
