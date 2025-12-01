@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -13,17 +13,64 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import Link from "next/link";
 import Image from "next/image";
+import { CheckCircle, Gift } from "lucide-react";
 
 export function SignUpForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [referralCode, setReferralCode] = useState("");
+  const [referralValid, setReferralValid] = useState<boolean | null>(null);
+  const [referrerName, setReferrerName] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // 从 URL 获取推荐码
+  useEffect(() => {
+    const refCode = searchParams.get("ref");
+    if (refCode) {
+      setReferralCode(refCode.toUpperCase());
+      validateReferralCode(refCode);
+    }
+  }, [searchParams]);
+
+  // 验证推荐码
+  const validateReferralCode = async (code: string) => {
+    if (!code || code.length < 6) {
+      setReferralValid(null);
+      setReferrerName("");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/referral/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const data = await res.json();
+      setReferralValid(data.valid);
+      setReferrerName(data.referrerName || "");
+    } catch (error) {
+      setReferralValid(false);
+    }
+  };
+
+  const handleReferralCodeChange = (value: string) => {
+    const code = value.toUpperCase();
+    setReferralCode(code);
+    if (code.length >= 6) {
+      validateReferralCode(code);
+    } else {
+      setReferralValid(null);
+      setReferrerName("");
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,8 +91,20 @@ export function SignUpForm() {
           onRequest: () => {
             setLoading(true);
           },
-          onSuccess: () => {
-            toast.success("Account created successfully");
+          onSuccess: async () => {
+            // 如果有有效的推荐码，绑定推荐关系
+            if (referralValid && referralCode) {
+              try {
+                await fetch("/api/referral/bind", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ referralCode }),
+                });
+              } catch (err) {
+                console.error("Failed to bind referral:", err);
+              }
+            }
+            toast.success("账户创建成功");
             router.push("/");
           },
           onError: (ctx) => {
@@ -106,6 +165,40 @@ export function SignUpForm() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
+          </div>
+          {/* 推荐码输入框 */}
+          <div className="grid gap-2">
+            <Label htmlFor="referralCode" className="flex items-center gap-1">
+              <Gift className="w-4 h-4" />
+              推荐码（选填）
+            </Label>
+            <div className="relative">
+              <Input
+                id="referralCode"
+                placeholder="输入推荐码可获得额外5天会员"
+                value={referralCode}
+                onChange={(e) => handleReferralCodeChange(e.target.value)}
+                maxLength={6}
+                className={
+                  referralValid === true
+                    ? "border-green-500 pr-10"
+                    : referralValid === false
+                    ? "border-red-500"
+                    : ""
+                }
+              />
+              {referralValid === true && (
+                <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-green-500" />
+              )}
+            </div>
+            {referralValid === true && referrerName && (
+              <p className="text-xs text-green-600">
+                ✓ 推荐人: {referrerName}，付费后双方各获得5天会员
+              </p>
+            )}
+            {referralValid === false && referralCode.length >= 6 && (
+              <p className="text-xs text-red-500">推荐码无效</p>
+            )}
           </div>
         </CardContent>
         <CardFooter className="flex flex-col gap-2">

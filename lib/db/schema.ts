@@ -15,6 +15,10 @@ export const user = pgTable("user", {
   isPaid: boolean("isPaid").notNull().default(false),
   subscriptionExpiresAt: timestamp("subscriptionExpiresAt"),
   stripeCustomerId: text("stripeCustomerId"),
+  // 推荐相关字段
+  referralCode: text("referralCode").unique(), // 用户的专属推荐码
+  referredBy: text("referredBy"), // 推荐人的用户ID（只记录直接推荐人）
+  referralRewardClaimed: boolean("referralRewardClaimed").default(false), // 是否已领取推荐奖励
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 });
@@ -137,4 +141,21 @@ export const subscriptions = pgTable("subscriptions", {
   expiresAt: timestamp("expiresAt").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+// 推荐奖励记录表
+export const referralRewards = pgTable("referral_rewards", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  referrerId: text("referrerId") // 推荐人ID
+    .notNull()
+    .references(() => user.id),
+  refereeId: text("refereeId") // 被推荐人ID
+    .notNull()
+    .references(() => user.id),
+  rewardDays: integer("rewardDays").notNull().default(5), // 奖励天数
+  referrerRewarded: boolean("referrerRewarded").default(false), // 推荐人是否已获得奖励
+  refereeRewarded: boolean("refereeRewarded").default(false), // 被推荐人是否已获得奖励
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
 });

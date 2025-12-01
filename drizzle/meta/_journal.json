@@ -43,6 +43,13 @@
       "when": 1764324045734,
       "tag": "0005_gray_tomorrow_man",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1764558681195,
+      "tag": "0006_add_referral_system",
+      "breakpoints": true
     }
   ]
 }

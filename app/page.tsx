@@ -20,6 +20,9 @@ import {
   Crown,
   User,
   CalendarDays,
+  Gift,
+  Copy,
+  Share2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import Image from "next/image";
@@ -68,6 +71,9 @@ export default function Dashboard() {
   const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
   const [showSubscriptionDialog, setShowSubscriptionDialog] = useState(false);
+  const [showReferralDialog, setShowReferralDialog] = useState(false);
+  const [referralCode, setReferralCode] = useState("");
+  const [referralLink, setReferralLink] = useState("");
 
   const { data: userProfile, isLoading: isProfileLoading } =
     useQuery<UserProfile>({
@@ -79,6 +85,20 @@ export default function Dashboard() {
       },
       enabled: !!session,
     });
+
+  // 获取推荐码
+  const fetchReferralCode = async () => {
+    try {
+      const res = await fetch("/api/referral/code");
+      if (res.ok) {
+        const data = await res.json();
+        setReferralCode(data.referralCode);
+        setReferralLink(data.referralLink);
+      }
+    } catch (error) {
+      console.error("Failed to fetch referral code:", error);
+    }
+  };
 
   const { data: stats = [], isLoading: isStatsLoading } = useQuery<
     CategoryStats[]
@@ -298,6 +318,23 @@ export default function Dashboard() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* 邀请有礼按钮 - 所有用户可见 */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-purple-600 hover:text-purple-700 hover:bg-purple-50 gap-1 px-2"
+            onClick={() => {
+              vibrate();
+              if (session && isPaid) {
+                fetchReferralCode();
+              }
+              setShowReferralDialog(true);
+            }}
+          >
+            <Gift className="w-4 h-4" />
+            <span className="text-xs">邀请有礼</span>
+          </Button>
+
           {session ? (
             <Popover>
               <PopoverTrigger asChild>
@@ -367,6 +404,26 @@ export default function Dashboard() {
                 </div>
 
                 <Separator />
+
+                {/* 推荐好友按钮 - 仅付费用户可见 */}
+                {isPaid && (
+                  <>
+                    <div className="p-2">
+                      <Button
+                        variant="ghost"
+                        className="w-full justify-start text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                        onClick={() => {
+                          fetchReferralCode();
+                          setShowReferralDialog(true);
+                        }}
+                      >
+                        <Gift className="w-4 h-4 mr-2" />
+                        推荐好友得会员
+                      </Button>
+                    </div>
+                    <Separator />
+                  </>
+                )}
 
                 <div className="p-2">
                   <Button
@@ -600,6 +657,118 @@ export default function Dashboard() {
               立即升级
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 推荐好友对话框 */}
+      <Dialog open={showReferralDialog} onOpenChange={setShowReferralDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Gift className="w-5 h-5 text-purple-500" />
+              邀请有礼
+            </DialogTitle>
+            <DialogDescription className="pt-2">
+              分享您的专属推荐码，好友注册并成为会员后，您和好友各得{" "}
+              <span className="font-bold text-purple-600">5天会员</span>！
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* 根据用户状态显示不同内容 */}
+            {!session ? (
+              // 未登录用户
+              <div className="space-y-4">
+                <div className="bg-gray-50 rounded-lg p-4 text-center">
+                  <div className="text-gray-400 mb-2">🎁</div>
+                  <div className="text-sm text-gray-600">
+                    注册并登录,获取您的专属推荐码
+                  </div>
+                </div>
+                <Button
+                  className="w-full"
+                  onClick={() => {
+                    setShowReferralDialog(false);
+                    router.push("/sign-up");
+                  }}
+                >
+                  立即注册
+                </Button>
+              </div>
+            ) : !isPaid ? (
+              // 已登录但非会员
+              <div className="space-y-4">
+                <div className="bg-yellow-50 rounded-lg p-4 text-center border border-yellow-200">
+                  <Crown className="w-8 h-8 text-yellow-500 mx-auto mb-2" />
+                  <div className="text-sm text-gray-700 font-medium">
+                    成为会员后即可推荐好友
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    开通会员，立即获取专属推荐码
+                  </div>
+                </div>
+                <Button
+                  className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white"
+                  onClick={() => {
+                    setShowReferralDialog(false);
+                    handleSubscribe();
+                  }}
+                >
+                  <Crown className="w-4 h-4 mr-2" />
+                  立即开通会员
+                </Button>
+              </div>
+            ) : (
+              // 已登录且是会员
+              <>
+                {/* 推荐码显示 */}
+                <div className="bg-purple-50 rounded-lg p-4 text-center">
+                  <div className="text-sm text-gray-500 mb-2">
+                    您的专属推荐码
+                  </div>
+                  <div className="text-3xl font-bold text-purple-600 tracking-widest">
+                    {referralCode || "加载中..."}
+                  </div>
+                </div>
+
+                {/* 复制按钮组 */}
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      navigator.clipboard.writeText(referralCode);
+                      toast.success("推荐码已复制");
+                    }}
+                  >
+                    <Copy className="w-4 h-4 mr-2" />
+                    复制推荐码
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      navigator.clipboard.writeText(referralLink);
+                      toast.success("推荐链接已复制");
+                    }}
+                  >
+                    <Share2 className="w-4 h-4 mr-2" />
+                    复制链接
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {/* 规则说明 - 所有用户可见 */}
+            <div className="text-xs text-gray-500 space-y-1 bg-gray-50 rounded-lg p-3">
+              <div className="font-medium text-gray-700 mb-1">推荐规则：</div>
+              <div>• 成为会员后可获取专属推荐码</div>
+              <div>
+                • 好友通过您的链接或推荐码注册并成为会员,双方各得5天会员
+              </div>
+              <div>• 推荐人数无上限，多推多得</div>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

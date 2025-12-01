@@ -191,18 +191,16 @@ export default function DailyStatsPage() {
                   <div className="flex items-center justify-between mb-3">
                     <div>
                       <div className="font-medium text-sm">
-                        {formatDate(day.date)}
+                         {formatFullDate(day.date)}
                       </div>
-                      <div className="text-xs text-gray-400">
-                        {formatFullDate(day.date)}
-                      </div>
+        
                     </div>
                     <div className="text-xs text-gray-400">
                       共 {day.correct + day.incorrect} 题
                     </div>
                   </div>
                   <div className="grid grid-cols-4 gap-2">
-                    <div className="flex items-center gap-1.5 bg-green-50 rounded-lg p-2">
+                    <div className=" flex items-center justify-center gap-1.5 bg-green-50 rounded-lg p-1">
                       <CheckCircle className="w-4 h-4 text-green-500" />
                       <div>
                         <div className="text-sm font-bold text-green-600">
@@ -213,7 +211,7 @@ export default function DailyStatsPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1.5 bg-red-50 rounded-lg p-2">
+                    <div className="flex items-center justify-center gap-1.5 bg-red-50 rounded-lg p-1">
                       <XCircle className="w-4 h-4 text-red-500" />
                       <div>
                         <div className="text-sm font-bold text-red-600">
@@ -222,7 +220,7 @@ export default function DailyStatsPage() {
                         <div className="text-[10px] text-red-500/70">做错</div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1.5 bg-yellow-50 rounded-lg p-2">
+                    <div className="flex items-center justify-center gap-1.5 bg-yellow-50 rounded-lg p-1">
                       <Star className="w-4 h-4 text-yellow-500" />
                       <div>
                         <div className="text-sm font-bold text-yellow-600">
@@ -233,7 +231,7 @@ export default function DailyStatsPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1.5 bg-blue-50 rounded-lg p-2">
+                    <div className="flex items-center justify-center  gap-1.5 bg-blue-50 rounded-lg p-1">
                       <Eye className="w-4 h-4 text-blue-500" />
                       <div>
                         <div className="text-sm font-bold text-blue-600">
