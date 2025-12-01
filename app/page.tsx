@@ -101,8 +101,13 @@ export default function Dashboard() {
         // 重新获取会话状态
         authClient.getSession().then((result) => {
           if (!result.data) {
-            // 会话已失效，跳转到登录页
-            router.push("/sign-in");
+            // 会话已失效，显示提示并跳转到登录页
+            toast.error("您的账号已在其他设备登录，当前设备已自动退出", {
+              duration: 5000,
+            });
+            authClient.signOut().then(() => {
+              router.push("/sign-in");
+            });
           }
         });
       }
@@ -112,6 +117,26 @@ export default function Dashboard() {
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
+  }, [session, router]);
+
+  // 定期检查会话状态（每30秒检查一次）
+  useEffect(() => {
+    if (!session) return;
+
+    const checkSession = async () => {
+      const result = await authClient.getSession();
+      if (!result.data) {
+        toast.error("您的账号已在其他设备登录，当前设备已自动退出", {
+          duration: 5000,
+        });
+        authClient.signOut().then(() => {
+          router.push("/sign-in");
+        });
+      }
+    };
+
+    const interval = setInterval(checkSession, 30000); // 每30秒检查一次
+    return () => clearInterval(interval);
   }, [session, router]);
 
   useEffect(() => {

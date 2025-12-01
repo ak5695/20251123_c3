@@ -16,16 +16,26 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import Link from "next/link";
 import Image from "next/image";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export function SignInForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const router = useRouter();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+  // 实际执行登录的函数
+  const performLogin = async () => {
     try {
       await authClient.signIn.email(
         {
@@ -59,6 +69,41 @@ export function SignInForm() {
       console.error(error);
       setLoading(false);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      // 先检查是否有其他活跃会话
+      const checkRes = await fetch("/api/auth/check-active-sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+
+      const checkData = await checkRes.json();
+
+      if (checkData.hasActiveSessions) {
+        // 有其他活跃会话，显示确认对话框
+        setLoading(false);
+        setShowConfirmDialog(true);
+      } else {
+        // 没有其他会话，直接登录
+        await performLogin();
+      }
+    } catch (error) {
+      console.error(error);
+      // 检查失败时，继续正常登录流程
+      await performLogin();
+    }
+  };
+
+  const handleConfirmLogin = async () => {
+    setShowConfirmDialog(false);
+    setLoading(true);
+    await performLogin();
   };
 
   return (
@@ -119,6 +164,29 @@ export function SignInForm() {
           </div>
         </CardFooter>
       </form>
+
+      {/* 确认在新设备登录的对话框 */}
+      <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>账号已在其他设备登录</AlertDialogTitle>
+            <AlertDialogDescription>
+              检测到您的账号当前已在其他设备上登录。如果继续登录，其他设备将被自动退出登录。
+              <br />
+              <br />
+              确定要在此设备上登录吗？
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setLoading(false)}>
+              取消
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmLogin}>
+              确认登录
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
