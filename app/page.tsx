@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import Image from "next/image";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Popover,
   PopoverContent,
@@ -70,6 +70,7 @@ interface UserProfile {
 export default function Dashboard() {
   const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
+  const queryClient = useQueryClient(); // Add this
   const [showSubscriptionDialog, setShowSubscriptionDialog] = useState(false);
   const [showReferralDialog, setShowReferralDialog] = useState(false);
   const [referralCode, setReferralCode] = useState("");
@@ -105,13 +106,24 @@ export default function Dashboard() {
   >({
     queryKey: ["dashboard-stats"],
     queryFn: async () => {
-      const res = await fetch("/api/dashboard-stats");
+      console.log("[Dashboard] Fetching stats...");
+      const res = await fetch("/api/dashboard-stats?t=" + Date.now()); // Prevent caching
       if (!res.ok) throw new Error("Failed to fetch stats");
-      return res.json();
+      const data = await res.json();
+      console.log("[Dashboard] Stats received:", data);
+      return data;
     },
     // enabled: !!session, // Removed to allow fetching stats for guests
     refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    staleTime: 0, // 数据立即过期，确保每次都能刷新
   });
+
+  // 每次进入页面都强制刷新数据
+  useEffect(() => {
+    console.log("[Dashboard] Mounted, invalidating stats query");
+    queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+  }, [queryClient]);
 
   // 当页面获得焦点时，重新验证会话状态
   // 这样当用户在其他设备登录后，切回此页面时会检测到会话已失效
@@ -269,11 +281,11 @@ export default function Dashboard() {
       href: "/mock-scores",
     },
     {
-      label: "我的笔记",
+      label: "我的评论",
       icon: PenTool,
       color: "text-orange-500",
       bg: "bg-orange-100",
-      href: "/notes",
+      href: "/my-comments",
     },
     {
       label: "每日统计",

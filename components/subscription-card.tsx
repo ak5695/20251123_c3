@@ -171,7 +171,7 @@ export function SubscriptionCard() {
                 </li>
                 <li className="flex items-center">
                   <span className="text-green-500 mr-2">✓</span>
-                  笔记功能
+                  评论功能
                 </li>
               </ul>
             </div>

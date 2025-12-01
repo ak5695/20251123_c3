@@ -88,6 +88,7 @@ interface Question {
   isRecited?: boolean;
   lastAnswered?: string; // 用户上次答案
   wrongCount?: number; // 做错次数
+  correctCount?: number; // 做对次数
 }
 
 interface QuizViewProps {
@@ -257,6 +258,7 @@ export function QuizView({
   const shouldScrollToPosition = useRef(false);
   const lastProcessedQuestionIdRef = useRef<number | null>(null);
   const lastModeRef = useRef<string>(mode);
+  const pendingRefreshRef = useRef(false); // 标记是否有待刷新的 questions 列表
   const [visibleQuestionIndex, setVisibleQuestionIndex] = useState(0);
   const visibleQuestionIndexRef = useRef(0);
   const lastSavedPositionRef = useRef<any>(null);
@@ -570,8 +572,18 @@ export function QuizView({
     Record<number, string[]>
   >({});
   const [mockScore, setMockScore] = useState<number | null>(null);
-  const [note, setNote] = useState<string>("");
-  const [isSavingNote, setIsSavingNote] = useState(false);
+  const [commentText, setCommentText] = useState<string>("");
+  const [isSavingComment, setIsSavingComment] = useState(false);
+  const [comments, setComments] = useState<
+    Array<{
+      id: string;
+      userId: string;
+      userName: string;
+      content: string;
+      createdAt: string;
+    }>
+  >([]);
+  const [isLoadingComments, setIsLoadingComments] = useState(false);
 
   const [isCheckingResume, setIsCheckingResume] = useState(mode === "mock");
   const [showResumeDialog, setShowResumeDialog] = useState(false);
@@ -942,42 +954,38 @@ export function QuizView({
     const question = questions[currentIndex];
     if (!question) return;
 
-    // Check if we should skip the effect
-    // We skip if the question ID is the same AND the mode is the same
-    // This prevents resetting state (like showAnswer) when we just updated the question status (e.g. marked as practiced)
-    // or when we just selected an answer (updating allUserAnswers)
-    if (
-      lastProcessedQuestionIdRef.current === question.id &&
-      lastModeRef.current === mode
-    ) {
-      return;
-    }
+    // 获取当前题目ID
+    const currentQuestionId = question.id;
 
-    lastProcessedQuestionIdRef.current = question.id;
-    lastModeRef.current = mode;
+    // 当题目ID变化时，必须重置状态（即使currentIndex没变，题目可能因为列表刷新而变了）
+    if (lastProcessedQuestionIdRef.current !== currentQuestionId) {
+      lastProcessedQuestionIdRef.current = currentQuestionId;
+      lastModeRef.current = mode;
 
-    setNote(question?.note || "");
+      // 加载评论
+      fetchComments(question.id);
 
-    // Restore user answer if exists (from current session)
-    const savedAnswer = allUserAnswers[currentIndex];
-    if (savedAnswer) {
-      setSelectedAnswers(savedAnswer);
-    } else {
-      setSelectedAnswers([]);
-    }
+      // 重置选中状态 - 检查这道新题目是否有保存的答案
+      const savedAnswer = allUserAnswers[currentIndex];
+      if (savedAnswer && questions[currentIndex]?.id === currentQuestionId) {
+        // 只有当保存的答案确实是这道题的时候才恢复
+        setSelectedAnswers(savedAnswer);
+      } else {
+        setSelectedAnswers([]);
+      }
 
-    // Determine visibility based on mode
-    if (mode === "mock") {
-      setShowAnswer(false);
-      setIsSubmitted(false);
-    } else if (mode === "notes") {
-      setShowAnswer(true);
-      setIsSubmitted(false);
-    } else {
-      // Practice mode: Always hide answer initially to allow redo
-      // even if question.isPracticed is true
-      setShowAnswer(false);
-      setIsSubmitted(false);
+      // Determine visibility based on mode
+      if (mode === "mock") {
+        setShowAnswer(false);
+        setIsSubmitted(false);
+      } else if (mode === "notes") {
+        setShowAnswer(true);
+        setIsSubmitted(false);
+      } else {
+        // Practice mode: Always hide answer initially to allow redo
+        setShowAnswer(false);
+        setIsSubmitted(false);
+      }
     }
   }, [currentIndex, questions, allUserAnswers, mode]);
 
@@ -1055,54 +1063,80 @@ export function QuizView({
     }
   };
 
-  const handleSaveNote = async () => {
-    if (!currentQuestion) return;
-    setIsSavingNote(true);
+  // 获取评论
+  const fetchComments = async (questionId: number) => {
+    setIsLoadingComments(true);
     try {
-      await fetch("/api/note", {
-        method: "POST",
-        body: JSON.stringify({
-          questionId: currentQuestion.id,
-          note: note,
-        }),
-      });
-
-      // Update local state
-      const updatedQuestions = [...questions];
-      updatedQuestions[currentIndex].note = note;
-      setQuestions(updatedQuestions);
-
-      toast.success("笔记已保存");
+      const res = await fetch(`/api/comments?questionId=${questionId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setComments(data);
+      }
     } catch (error) {
-      toast.error("保存笔记失败");
+      console.error("Failed to fetch comments:", error);
     } finally {
-      setIsSavingNote(false);
+      setIsLoadingComments(false);
     }
   };
 
-  const handleDeleteNote = async (questionId: number) => {
-    if (!confirm("确定要删除这条笔记吗？")) return;
+  // 添加评论
+  const handleAddComment = async () => {
+    if (!currentQuestion || !commentText.trim()) return;
+    if (!session) {
+      toast.error("请先登录");
+      return;
+    }
+    if (!isPaid) {
+      toast.error("请先开通会员");
+      return;
+    }
 
-    // Optimistic update
-    setQuestions((prev) => prev.filter((q) => q.id !== questionId));
-    setTotalCount((prev) => prev - 1);
-
+    setIsSavingComment(true);
     try {
-      const response = await fetch("/api/note", {
-        method: "DELETE",
+      const res = await fetch("/api/comments", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ questionId }),
+        body: JSON.stringify({
+          questionId: currentQuestion.id,
+          content: commentText.trim(),
+        }),
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to delete note");
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "发表评论失败");
       }
-      toast.success("笔记已删除");
+
+      const newComment = await res.json();
+      setComments((prev) => [newComment, ...prev]);
+      setCommentText("");
+      toast.success("评论已发表");
+    } catch (error: any) {
+      toast.error(error.message || "发表评论失败");
+    } finally {
+      setIsSavingComment(false);
+    }
+  };
+
+  // 删除评论
+  const handleDeleteComment = async (commentId: string) => {
+    if (!confirm("确定要删除这条评论吗？")) return;
+
+    try {
+      const res = await fetch("/api/comments", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commentId }),
+      });
+
+      if (!res.ok) {
+        throw new Error("删除失败");
+      }
+
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
+      toast.success("评论已删除");
     } catch (error) {
-      console.error("Delete note error:", error);
       toast.error("删除失败");
-      // Revert (reload questions or just show error)
-      // For simplicity, we might just reload or let the user refresh if it failed
     }
   };
 
@@ -1212,18 +1246,38 @@ export function QuizView({
     setAnsweredQuestions((prev) => ({ ...prev, [currentIndex]: isCorrect }));
 
     try {
-      await fetch("/api/submit", {
+      const res = await fetch("/api/submit", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           questionId: currentQuestion.id,
           userAnswer,
           isCorrect,
         }),
       });
-      // Invalidate dashboard stats to update homepage immediately
-      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        console.error("Submit failed:", res.status, errData);
+        toast.error(errData.error || "提交失败");
+      } else {
+        const data = await res.json();
+        console.log("[Submit] Success:", data);
+
+        // Invalidate dashboard stats to update homepage immediately
+        queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+
+        // 在详情模式下（detailIndex !== null），不立即刷新 questions 列表
+        // 保持用户答题的连贯性，等用户离开详情模式时再统一刷新
+        if (detailIndex !== null) {
+          pendingRefreshRef.current = true;
+        } else {
+          // 非详情模式下，立即刷新以更新列表中的状态显示
+          queryClient.invalidateQueries({ queryKey: ["questions"] });
+        }
+      }
     } catch (error) {
-      console.error("Failed to submit answer");
+      console.error("Failed to submit answer:", error);
+      toast.error("提交失败");
     }
   };
 
@@ -1545,6 +1599,12 @@ export function QuizView({
               const targetScrollTop = currentIndex === 0 ? 0 : -1;
               savePosition(offset, currentIndex, targetScrollTop);
 
+              // 如果有待刷新的 questions 列表，返回列表时执行刷新
+              if (pendingRefreshRef.current) {
+                pendingRefreshRef.current = false;
+                queryClient.invalidateQueries({ queryKey: ["questions"] });
+              }
+
               setDetailIndex(null);
               // 触发一次恢复逻辑
               shouldScrollToPosition.current = true;
@@ -1568,7 +1628,7 @@ export function QuizView({
                 : mode === "collection"
                 ? "试题收藏"
                 : mode === "notes"
-                ? "我的笔记"
+                ? "我的评论"
                 : mode === "category" && !category
                 ? "全部题库"
                 : "练习")}
@@ -1686,6 +1746,7 @@ export function QuizView({
                       scrollContainerRef.current?.scrollTop || 0;
                     savePosition(offset, i, currentScrollTop);
 
+                    setShowAnswer(false); // 进入详情时默认隐藏答案
                     setDetailIndex(i);
                     setCurrentIndex(i);
                   }}
@@ -1695,45 +1756,14 @@ export function QuizView({
                       <span className="text-gray-500 mb-1">
                         {offset + i + 1}.
                       </span>
-                      {/* 题目类型标签 */}
-                      <span
-                        className={`px-2 py-1 rounded text-xs font-medium ${
-                          q.type === "SINGLE"
-                            ? "bg-blue-100 text-blue-600"
-                            : q.type === "MULTIPLE"
-                            ? "bg-purple-100 text-purple-600"
-                            : "bg-orange-100 text-orange-600"
-                        }`}
-                      >
-                        {q.type === "SINGLE"
-                          ? "单选"
-                          : q.type === "MULTIPLE"
-                          ? "多选"
-                          : "判断"}
-                      </span>
-                      {/* 错误次数标签 - 仅在错题模式下显示 */}
-                      {filterType === "incorrect" &&
-                        q.wrongCount &&
-                        q.wrongCount > 0 && (
-                          <span className="mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-500 border border-red-200">
-                            错{q.wrongCount}次
-                          </span>
-                        )}
                     </div>
                     <div className="flex-1">
-                      {/* 做题状态标签区域 */}
-                      {(q.status === "correct" || q.status === "incorrect") && (
+                      {/* 做题状态标签区域 - 只显示做错 */}
+                      {q.status === "incorrect" && (
                         <div className="flex items-center gap-2 mb-2">
-                          {q.status === "correct" && (
-                            <span className="px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-600">
-                              做对
-                            </span>
-                          )}
-                          {q.status === "incorrect" && (
-                            <span className="px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-600">
-                              做错
-                            </span>
-                          )}
+                          <span className="px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-600">
+                            做错
+                          </span>
                         </div>
                       )}
 
@@ -1763,12 +1793,6 @@ export function QuizView({
                           </span>
                         )}
                       </div>
-                      {showAllAnswers && q.note && (
-                        <div className="mt-1 text-sm text-blue-500">
-                          <span className="font-medium">笔记: </span>
-                          {q.note}
-                        </div>
-                      )}
                     </div>
                   </div>
 
@@ -1876,20 +1900,51 @@ export function QuizView({
                         )}
                       </button>
                     </div>
-
-                    {mode === "notes" && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          vibrate();
-                          handleDeleteNote(q.id);
-                        }}
-                        className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-all active:scale-95 bg-red-100 text-red-600 hover:bg-red-200"
+                    {/* 题型和答题状态标签 */}
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`px-2 py-1 rounded text-xs font-medium ${
+                          q.type === "SINGLE"
+                            ? "bg-blue-100 text-blue-600"
+                            : q.type === "MULTIPLE"
+                            ? "bg-purple-100 text-purple-600"
+                            : "bg-orange-100 text-orange-600"
+                        }`}
                       >
-                        <Trash2 className="w-3 h-3" />
-                        删除
-                      </button>
-                    )}
+                        {q.type === "SINGLE"
+                          ? "单选"
+                          : q.type === "MULTIPLE"
+                          ? "多选"
+                          : "判断"}
+                      </span>
+                      {(!q.correctCount || q.correctCount === 0) &&
+                      (!q.wrongCount || q.wrongCount === 0) ? (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-50 text-gray-500 border border-gray-200">
+                          未做
+                        </span>
+                      ) : (
+                        <>
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                              q.correctCount && q.correctCount > 0
+                                ? "bg-green-200 text-green-900 border border-green-200"
+                                : "bg-gray-200 text-gray-500 border border-gray-200"
+                            }`}
+                          >
+                            对{q.correctCount || 0}次
+                          </span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                              q.wrongCount && q.wrongCount > 0
+                                ? "bg-red-200 text-red-500 border border-red-200"
+                                : "bg-gray-200 text-gray-500 border border-gray-200"
+                            }`}
+                          >
+                            错{q.wrongCount || 0}次
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </Card>
               </div>
@@ -1924,16 +1979,15 @@ export function QuizView({
               {options.map((opt: any) => {
                 const isSelected = selectedAnswers.includes(opt.label);
                 const isCorrect = currentQuestion.answer.includes(opt.label);
-                const isReciteMode =
-                  viewMode === "list" && detailIndex !== null;
-                const shouldShowAnswer = showAnswer || isReciteMode;
 
                 let optionStyle = "border-gray-200";
-                if (shouldShowAnswer) {
+                if (showAnswer) {
+                  // 只有显示答案时才显示正确/错误样式
                   if (isCorrect) optionStyle = "border-green-500 bg-green-50";
                   else if (isSelected && !isCorrect)
                     optionStyle = "border-red-500 bg-red-50";
                 } else if (isSelected) {
+                  // 未显示答案时，只显示选中样式
                   optionStyle = "border-orange-500 bg-orange-50";
                 }
 
@@ -1942,15 +1996,15 @@ export function QuizView({
                     key={opt.label}
                     className={`flex items-center p-3 border rounded-lg cursor-pointer transition-all active:scale-95 ${optionStyle}`}
                     onClick={() => {
-                      if (!isReciteMode) {
-                        vibrate();
-                        handleOptionSelect(opt.label);
-                      }
+                      vibrate();
+                      handleOptionSelect(opt.label);
                     }}
                   >
                     <div
                       className={`w-6 h-6 rounded-full flex items-center justify-center mr-2 text-xs border ${
-                        isSelected || (shouldShowAnswer && isCorrect)
+                        showAnswer && isCorrect
+                          ? "bg-green-500 border-green-500 text-white"
+                          : isSelected
                           ? "bg-orange-500 border-orange-500 text-white"
                           : "border-gray-300 text-gray-500"
                       }`}
@@ -1963,7 +2017,7 @@ export function QuizView({
               })}
             </div>
 
-            {(showAnswer || (viewMode === "list" && detailIndex !== null)) && (
+            {showAnswer && (
               <div className="mt-4 p-3 bg-gray-100 rounded-lg">
                 <div className="font-bold mb-2">答案解析</div>
                 <div className="mb-2">
@@ -1986,22 +2040,86 @@ export function QuizView({
                   </div>
                 )}
 
+                {/* 评论区 */}
                 <div className="mt-4 pt-4 border-t border-gray-200">
-                  <div className="font-bold mb-2 text-gray-700">我的笔记</div>
-                  <Textarea
-                    placeholder="在这里输入你的笔记..."
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    className="mb-2 bg-white"
-                  />
-                  <Button
-                    size="sm"
-                    onClick={handleSaveNote}
-                    disabled={isSavingNote}
-                    className="w-full"
-                  >
-                    {isSavingNote ? "保存中..." : "保存笔记"}
-                  </Button>
+                  <div className="font-bold mb-3 text-gray-700">
+                    评论 ({comments.length})
+                  </div>
+
+                  {/* 添加评论 */}
+                  {session && isPaid ? (
+                    <div className="mb-4">
+                      <Textarea
+                        placeholder="发表你的评论..."
+                        value={commentText}
+                        onChange={(e) => setCommentText(e.target.value)}
+                        className="mb-2 bg-white"
+                        maxLength={500}
+                      />
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-gray-400">
+                          {commentText.length}/500
+                        </span>
+                        <Button
+                          size="sm"
+                          onClick={handleAddComment}
+                          disabled={isSavingComment || !commentText.trim()}
+                        >
+                          {isSavingComment ? "发表中..." : "发表评论"}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mb-4 p-3 bg-gray-50 rounded-lg text-center text-sm text-gray-500">
+                      {!session ? "登录后可发表评论" : "开通会员后可发表评论"}
+                    </div>
+                  )}
+
+                  {/* 评论列表 */}
+                  {isLoadingComments ? (
+                    <div className="text-center text-gray-400 text-sm py-4">
+                      加载评论中...
+                    </div>
+                  ) : comments.length === 0 ? (
+                    <div className="text-center text-gray-400 text-sm py-4">
+                      暂无评论，来发表第一条吧
+                    </div>
+                  ) : (
+                    <div className="space-y-3 max-h-60 overflow-y-auto">
+                      {comments.map((comment) => (
+                        <div
+                          key={comment.id}
+                          className="bg-gray-50 rounded-lg p-3"
+                        >
+                          <div className="flex justify-between items-start mb-1">
+                            <span className="font-medium text-sm text-gray-700">
+                              {comment.userName}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-400">
+                                {new Date(
+                                  comment.createdAt
+                                ).toLocaleDateString()}
+                              </span>
+                              {session?.user?.id === comment.userId && (
+                                <button
+                                  onClick={() =>
+                                    handleDeleteComment(comment.id)
+                                  }
+                                  className="text-gray-400 hover:text-red-500 text-xs"
+                                >
+                                  删除
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-sm text-gray-600 whitespace-pre-wrap">
+                            {comment.content}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -2127,6 +2245,21 @@ export function QuizView({
               <Button
                 variant="ghost"
                 className="flex-col gap-1 h-auto py-2 px-2"
+                onClick={() => setShowAnswer(!showAnswer)}
+              >
+                {showAnswer ? (
+                  <EyeOff className="w-5 h-5" />
+                ) : (
+                  <Eye className="w-5 h-5" />
+                )}
+                <span className="text-[10px]">
+                  {showAnswer ? "隐藏答案" : "显示答案"}
+                </span>
+              </Button>
+
+              <Button
+                variant="ghost"
+                className="flex-col gap-1 h-auto py-2 px-2"
                 onClick={handleCollect}
               >
                 <Star
@@ -2168,6 +2301,16 @@ export function QuizView({
               >
                 <ChevronLeft className="h-4 w-4 sm:hidden" />
                 <span className="hidden sm:inline">上一题</span>
+              </Button>
+              <Button
+                size="sm"
+                className="bg-blue-500 hover:bg-blue-600"
+                onClick={handleSubmit}
+                disabled={
+                  selectedAnswers.length === 0 || isSubmitted || showAnswer
+                }
+              >
+                提交
               </Button>
               <Button
                 className="bg-orange-500 hover:bg-orange-600"
@@ -2345,24 +2488,27 @@ export function QuizView({
                     <ChevronRight className="h-4 w-4 sm:hidden" />
                   </Button>
                 ) : null
-              ) : isSubmitted || showAnswer ? (
-                <Button
-                  size="sm"
-                  onClick={handleNext}
-                  className="bg-orange-500 hover:bg-orange-600 shrink-0 px-2 sm:px-3"
-                >
-                  <span className="hidden sm:inline">下一题</span>
-                  <ChevronRight className="h-4 w-4 sm:hidden" />
-                </Button>
               ) : (
-                <Button
-                  size="sm"
-                  onClick={handleSubmit}
-                  className="bg-orange-500 hover:bg-orange-600 shrink-0 px-2 sm:px-3"
-                  disabled={selectedAnswers.length === 0}
-                >
-                  提交
-                </Button>
+                <>
+                  <Button
+                    size="sm"
+                    onClick={handleSubmit}
+                    className="bg-blue-500 hover:bg-blue-600 shrink-0 px-2 sm:px-3"
+                    disabled={
+                      selectedAnswers.length === 0 || isSubmitted || showAnswer
+                    }
+                  >
+                    提交
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleNext}
+                    className="bg-orange-500 hover:bg-orange-600 shrink-0 px-2 sm:px-3"
+                  >
+                    <span className="hidden sm:inline">下一题</span>
+                    <ChevronRight className="h-4 w-4 sm:hidden" />
+                  </Button>
+                </>
               )}
             </div>
           </>
@@ -2373,6 +2519,7 @@ export function QuizView({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>答题设置</DialogTitle>
+            <DialogDescription>设置题目数量和出题顺序</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">

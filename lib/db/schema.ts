@@ -159,3 +159,19 @@ export const referralRewards = pgTable("referral_rewards", {
   refereeRewarded: boolean("refereeRewarded").default(false), // 被推荐人是否已获得奖励
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
+
+// 公开评论表
+export const comments = pgTable("comments", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("userId")
+    .notNull()
+    .references(() => user.id),
+  userName: text("userName").notNull(), // 冗余存储用户名，方便查询
+  questionId: integer("questionId")
+    .notNull()
+    .references(() => questions.id),
+  content: text("content").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});

@@ -15,7 +15,12 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { questionId, userAnswer, isCorrect } = body;
+  let { questionId, userAnswer, isCorrect } = body;
+  questionId = Number(questionId); // Ensure number
+
+  console.log(
+    `[Submit] User: ${session.user.id}, Question: ${questionId}, Answer: ${userAnswer}, Correct: ${isCorrect}`
+  );
 
   // Record the attempt
   await db.insert(userProgress).values({
@@ -37,28 +42,54 @@ export async function POST(req: NextRequest) {
     )
     .limit(1);
 
+  let resultAction = "";
+  let oldState = null;
+  let newState = null;
+
   if (existingState.length > 0) {
+    oldState = existingState[0];
+    console.log(
+      `[Submit] Updating existing state. ID: ${existingState[0].id}, Prev Wrong: ${existingState[0].wrongCount}, Prev Correct: ${existingState[0].correctCount}`
+    );
+
+    const updateData = {
+      wrongCount: isCorrect
+        ? 0 // Reset wrong count if answered correctly to remove from "Incorrect" category
+        : (existingState[0].wrongCount || 0) + 1,
+      correctCount: isCorrect
+        ? (existingState[0].correctCount || 0) + 1
+        : existingState[0].correctCount || 0,
+      lastAnsweredAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    newState = updateData;
+    resultAction = "updated";
+
     await db
       .update(userQuestionState)
-      .set({
-        wrongCount: isCorrect
-          ? 0 // Reset wrong count if answered correctly to remove from "Incorrect" category
-          : existingState[0].wrongCount + 1,
-        correctCount: isCorrect
-          ? existingState[0].correctCount + 1
-          : existingState[0].correctCount,
-        lastAnsweredAt: new Date(),
-      })
+      .set(updateData)
       .where(eq(userQuestionState.id, existingState[0].id));
   } else {
-    await db.insert(userQuestionState).values({
+    console.log(`[Submit] Creating new state.`);
+    resultAction = "created";
+
+    const insertData = {
       userId: session.user.id,
       questionId,
       wrongCount: isCorrect ? 0 : 1,
       correctCount: isCorrect ? 1 : 0,
       lastAnsweredAt: new Date(),
-    });
+    };
+    newState = insertData;
+
+    await db.insert(userQuestionState).values(insertData);
   }
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({
+    success: true,
+    action: resultAction,
+    oldState,
+    newState,
+  });
 }

@@ -20,6 +20,7 @@ export async function GET() {
     let categoryStats;
 
     if (session) {
+      console.log(`[Stats] Fetching stats for user: ${session.user.id}`);
       // Fetch stats grouped by category for logged-in user
       categoryStats = await db
         .select({
@@ -40,6 +41,8 @@ export async function GET() {
           )
         )
         .groupBy(questions.category);
+
+      // console.log(`[Stats] Raw category stats:`, categoryStats);
     } else {
       // Fetch only totals for guests
       const rawStats = await db

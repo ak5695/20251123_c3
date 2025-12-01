@@ -96,7 +96,7 @@ export default function SupportPage() {
               <div className="border-l-4 border-blue-500 pl-4">
                 <h3 className="font-medium">会员到期后数据会删除吗？</h3>
                 <p className="text-sm text-gray-600 mt-1">
-                  不会。您的学习记录、笔记等数据会保留，续费后可继续使用。
+                  不会。您的学习记录、评论等数据会保留，续费后可继续使用。
                 </p>
               </div>
             </div>

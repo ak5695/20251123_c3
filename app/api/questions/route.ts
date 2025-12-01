@@ -130,6 +130,7 @@ export async function GET(req: NextRequest) {
       note: userQuestionState.note,
       isPracticed: sql<boolean>`COALESCE(${userQuestionState.correctCount}, 0) > 0 OR COALESCE(${userQuestionState.wrongCount}, 0) > 0`,
       wrongCount: sql<number>`COALESCE(${userQuestionState.wrongCount}, 0)::int`,
+      correctCount: sql<number>`COALESCE(${userQuestionState.correctCount}, 0)::int`,
     })
     .from(questions)
     .leftJoin(
