@@ -93,6 +93,27 @@ export default function Dashboard() {
     refetchOnMount: "always",
   });
 
+  // 当页面获得焦点时，重新验证会话状态
+  // 这样当用户在其他设备登录后，切回此页面时会检测到会话已失效
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && session) {
+        // 重新获取会话状态
+        authClient.getSession().then((result) => {
+          if (!result.data) {
+            // 会话已失效，跳转到登录页
+            router.push("/sign-in");
+          }
+        });
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [session, router]);
+
   useEffect(() => {
     // Removed redirect to allow guest access
   }, [session, isPending, router]);

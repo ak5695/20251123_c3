@@ -16,9 +16,10 @@ export const auth = betterAuth({
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     // 更新会话的阈值
     updateAge: 60 * 60 * 24, // 1 day
+    // 禁用 cookie 缓存，确保每次请求都从数据库验证会话
+    // 这样当会话被撤销时，其他设备会立即失效
     cookieCache: {
-      enabled: true,
-      maxAge: 5 * 60, // 5 minutes
+      enabled: false,
     },
   },
   emailAndPassword: {
