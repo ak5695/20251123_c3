@@ -37,7 +37,15 @@ export function SignInForm() {
           onRequest: () => {
             setLoading(true);
           },
-          onSuccess: () => {
+          onSuccess: async () => {
+            // 登录成功后，撤销该账户在其他设备上的会话
+            try {
+              await fetch("/api/auth/revoke-other-sessions", {
+                method: "POST",
+              });
+            } catch (err) {
+              console.error("Failed to revoke other sessions:", err);
+            }
             toast.success("登录成功");
             router.push("/");
           },

@@ -11,6 +11,16 @@ export const auth = betterAuth({
     provider: "pg", // or "mysql", "sqlite"
     schema: schema,
   }),
+  session: {
+    // 会话过期时间设置为 7 天
+    expiresIn: 60 * 60 * 24 * 7, // 7 days
+    // 更新会话的阈值
+    updateAge: 60 * 60 * 24, // 1 day
+    cookieCache: {
+      enabled: true,
+      maxAge: 5 * 60, // 5 minutes
+    },
+  },
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false, // Temporarily disable to allow login
