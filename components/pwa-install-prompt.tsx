@@ -95,7 +95,11 @@ export function PWAInstallPrompt() {
       <div className="max-w-lg mx-auto">
         <div className="flex items-start gap-3">
           <div className="flex-shrink-0 w-12 h-12 rounded-xl overflow-hidden">
-            <img src="/icon-192x192.png" alt="App Icon" className="w-full h-full" />
+            <img
+              src="/icon-192x192.png"
+              alt="App Icon"
+              className="w-full h-full"
+            />
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold text-gray-900">安装 C3安考宝典</h3>
